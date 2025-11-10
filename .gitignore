@@ -54,4 +54,6 @@ dkms.conf
 # debug information files
 *.dwo
 
+#著作権やばい
 /videos
+/images
