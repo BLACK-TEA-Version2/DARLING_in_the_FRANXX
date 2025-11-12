@@ -17,13 +17,21 @@ static SDL_Texture* gReelBackgroundTexture = NULL; // (★) リール背景用�
 static float gReelPos[3]        = {0.0f, 0.0f, 0.0f};
 static bool  gIsSpinning[3]     = {false, false, false};
 static bool  gIsStopping[3]     = {false, false, false};
+static bool  gIsSpinningBackward[3] = {false, false, false}; // (★追加) 逆回転フラグ
 static int   gTargetStopGridM[3]= {0, 0, 0};
 static float gTargetPos[3]      = {0.0f, 0.0f, 0.0f};
 static YakuType gCurrentYaku = YAKU_HAZURE;
 static int      gStopOrder[3] = {0, 0, 0};
 static int gStoppedGridM[3] = {-1, -1, -1};
 
-// (★) 逆回転フラグは削除 (gIsSpinningBackward は削除)
+// (★追加) 強制停止パターンの定義 (グリッドインデックス)
+// (注: グリッドインデックス m は「枠上」の図柄インデックスを指す)
+// 中段 AKA_7 (インデックス 6) にするには、グリッド 5 (5+1=6) を指定
+static const int PATTERN_RED7_MID_GRID[3] = { 5, 5, 5 }; 
+// 左: AKA_7(6) -> グリッド 5
+// 中: AKA_7(6) -> グリッド 5
+// 右: UE(7)/NAKA(8) -> 枠上UE(7) -> グリッド 7
+static const int PATTERN_FRANXX_BONUS_GRID[3] = { 5, 5, 7 };
 
 // ===================== リール配列 =====================
 SymbolType left_reel[SYMBOLS_PER_REEL] = {
@@ -339,16 +347,63 @@ void Reel_StartSpinning() {
     for (int i = 0; i < 3; i++) {
         gIsSpinning[i] = true;
         gIsStopping[i] = false;
+        gIsSpinningBackward[i] = false; // (★追加)
         gStoppedGridM[i] = -1;
         gStopOrder[i] = 0;
     }
 }
 
+// (★新規) 逆回転開始
+void Reel_StartSpinning_Reverse(void) {
+    for (int i = 0; i < 3; i++) {
+        gIsSpinning[i] = false;
+        gIsStopping[i] = false;
+        gIsSpinningBackward[i] = true; // (★追加)
+        gStoppedGridM[i] = -1;
+        gStopOrder[i] = 0;
+    }
+}
+
+// (★新規) 強制停止
+void Reel_ForceStop(ReelForceStopPattern pattern) {
+    const int* target_grid_m = NULL;
+
+    if (pattern == REEL_PATTERN_RED7_MID) {
+        target_grid_m = PATTERN_RED7_MID_GRID;
+    } else if (pattern == REEL_PATTERN_FRANXX_BONUS) {
+        target_grid_m = PATTERN_FRANXX_BONUS_GRID;
+    } else {
+        return; // 不明なパターン
+    }
+    
+    const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
+
+    for (int i = 0; i < 3; i++) {
+        gIsSpinning[i] = false;
+        gIsStopping[i] = false;
+        gIsSpinningBackward[i] = false; // (★追加)
+
+        int grid_m = target_grid_m[i];
+        gStoppedGridM[i] = grid_m;
+        gTargetStopGridM[i] = grid_m; // (念のため)
+        
+        // グリッドインデックスからY座標を計算
+        gReelPos[i] = Wrap((float)(grid_m * SYMBOL_HEIGHT), REEL_LENGTH);
+        gTargetPos[i] = gReelPos[i];
+    }
+}
+
+
 // (★) Reel_StartSpinning_Enshutsu_Backward 関数を削除
 
 void Reel_RequestStop(int reel_index, int stop_order) {
     if (reel_index < 0 || reel_index > 2) return;
-    if (!gIsSpinning[reel_index]) return;
+    
+    // (★修正) 順回転中、または逆回転中のみ停止を受け付ける
+    if (!gIsSpinning[reel_index] && !gIsSpinningBackward[reel_index]) return;
+
+    // (★追加) 逆回転中だった場合は、ここで止める
+    gIsSpinningBackward[reel_index] = false;
 
     const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
     gStopOrder[reel_index] = stop_order;
@@ -388,26 +443,33 @@ void Reel_RequestStop(int reel_index, int stop_order) {
 
 void Reel_Update() {
     const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
-    // (★) 常に順回転 (-REEL_SPEED)
-    const float speed = -REEL_SPEED;
+    // (★) 順回転 (-REEL_SPEED)
+    const float speed_forward = -REEL_SPEED;
+    const float speed_backward = REEL_SPEED; // (★追加) 逆回転（プラス方向）
 
     for (int i = 0; i < 3; i++) {
         if (gIsSpinning[i]) {
-            gReelPos[i] += speed; 
+            gReelPos[i] += speed_forward; 
             gReelPos[i]  = Wrap(gReelPos[i], REEL_LENGTH);
 
-        } else if (gIsStopping[i]) {
+        } 
+        else if (gIsSpinningBackward[i]) {
+             // (★追加) 逆回転
+            gReelPos[i] += speed_backward; 
+            gReelPos[i]  = Wrap(gReelPos[i], REEL_LENGTH);
+        }
+        else if (gIsStopping[i]) {
             // (★) 順回転の残り距離計算のみ
             float remaining = gReelPos[i] - gTargetPos[i];
             if (remaining < 0.0f) remaining += REEL_LENGTH;
 
             // (★) 速度の絶対値で比較
-            if (remaining <= fabsf(speed) + EPS) {
+            if (remaining <= fabsf(speed_forward) + EPS) {
                 gReelPos[i]  = gTargetPos[i];
                 gIsStopping[i] = false;
                 gStoppedGridM[i] = gTargetStopGridM[i];
             } else {
-                gReelPos[i] += speed; 
+                gReelPos[i] += speed_forward; 
                 gReelPos[i]  = Wrap(gReelPos[i], REEL_LENGTH);
             }
         }
@@ -488,7 +550,8 @@ void Reel_Draw(SDL_Renderer* renderer, int screen_width, int screen_height) {
 
 bool Reel_IsSpinning() {
     for (int i = 0; i < 3; i++) {
-        if (gIsSpinning[i] || gIsStopping[i]) return true;
+        // (★修正) 逆回転中も「回転中」とみなす
+        if (gIsSpinning[i] || gIsStopping[i] || gIsSpinningBackward[i]) return true;
     }
     return false;
 }

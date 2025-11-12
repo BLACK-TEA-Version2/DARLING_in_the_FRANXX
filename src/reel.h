@@ -4,6 +4,7 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
 #include "common.h" // (★) YakuType, SymbolType のためにインクルード
+#include "game_data.h" // (★追加) ReelForceStopPattern のため
 
 // --- 定義セクション ---
 #define SYMBOLS_PER_REEL 20
@@ -30,6 +31,17 @@ bool Reel_Init(SDL_Renderer* renderer);
  * @brief 3つのリールすべてを回転開始します。
  */
 void Reel_StartSpinning();
+
+/**
+ * @brief (★新規) 3つのリールすべてを【逆回転】開始します。
+ */
+void Reel_StartSpinning_Reverse(void);
+
+/**
+ * @brief (★新規) 3つのリールすべてを【強制停止】させます。
+ * @param pattern 停止させる図柄パターン (REEL_PATTERN_RED7_MID など)
+ */
+void Reel_ForceStop(ReelForceStopPattern pattern);
 
 /**
  * @brief 特定のリールの停止を要求します。

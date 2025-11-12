@@ -2,6 +2,8 @@
 #define GAME_DATA_H
 
 #include "common.h" // AT_State, YakuType のため
+#include "video_defs.h" // (★追加) VideoType のため
+#include <SDL2/SDL_stdinc.h> // (★追加) Uint32 のため
 
 // --- 比翼BEATSレベル ---
 typedef enum {
@@ -9,6 +11,38 @@ typedef enum {
     HIYOKU_LV2 = 2, // 3G
     HIYOKU_MAXX = 3 // 4G
 } HiyokuLevel;
+
+// =================================================================
+// (★追加) AT高確率状態の内部ステップ定義
+// =================================================================
+typedef enum {
+    AT_STEP_NONE,             // AT高確率状態ではない (★コンパイルエラー 'AT_STEP_NONE' undeclared 対策)
+    AT_STEP_WAIT_LEVER1,      // (1) 1回目レバーオン待ち
+    AT_STEP_REEL_SPIN,        // (1) リール回転中
+    AT_STEP_LOOP_VIDEO_INTRO, // (2) 専用演出（導入）再生中
+    AT_STEP_LOOP_VIDEO_MAIN,  // (2-bis) 専用演出（ループ）再生中 (2回目レバー待ち)
+    AT_STEP_JUDGE_VIDEO,      // (3) 当落演出 再生中
+} AtStep;
+
+// =================================================================
+// (★追加) AT高確率状態のボーナス抽選結果
+// =================================================================
+typedef enum {
+    BONUS_NONE,         // ハズレ (抽選対象外役)
+    BONUS_AT_CONTINUE,  // 落選 (AT継続)
+    BONUS_DARLING,      // 当選 (ダーリンインザボーナス)
+    BONUS_FRANXX        // 当選 (フランクスボーナス)
+} AT_BonusResultType;
+
+// =================================================================
+// (★追加) リール強制停止パターン定義
+// =================================================================
+typedef enum {
+    REEL_PATTERN_NONE,
+    REEL_PATTERN_RED7_MID,      // 中段 赤7揃い
+    REEL_PATTERN_FRANXX_BONUS   // 左中:赤7中段, 右:UE/NAKA
+} ReelForceStopPattern;
+
 
 // --- 全モジュール共通 ゲームデータ構造体 ---
 typedef struct {
@@ -38,6 +72,24 @@ typedef struct {
     char last_yaku_name[64];  // 最後に成立した役の名前
     char info_message[128]; // 画面に表示するメッセージ
     bool oshijun_success;     // そのゲームで押し順に成功したか
+
+    // =================================================================
+    // (★追加) 7. AT高確率状態 演出制御データ
+    // =================================================================
+    AtStep at_step;                 // AT高確率状態の内部ステップ
+    AT_BonusResultType at_bonus_result; // 1回目レバーオン時のボーナス抽選結果
+    YakuType at_last_lottery_yaku;  // 1回目レバーオン時の成立役 (at_step 進行中も保持)
+    
+    // 演出動画ペア
+    VideoType at_pres_intro_id;
+    VideoType at_pres_loop_id;
+    
+    // 当落演出用タイマー
+    Uint32 at_judge_video_start_time;
+    Uint32 at_judge_video_duration_ms; // 当落動画の再生時間 (仮)
+    bool at_judge_timing_reverse_triggered;
+    bool at_judge_timing_stop_triggered;
+
 
 } GameData;
 

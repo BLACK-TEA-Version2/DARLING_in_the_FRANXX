@@ -1,4 +1,4 @@
-// at.c (修正版)
+// at.c (★変更版)
 
 #include "at.h"
 #include "lottery.h"
@@ -7,7 +7,7 @@
 #include <string.h>
 
 // --- 内部ヘルパー関数 ---
-// (...変更なし...)
+// (★) 既存の内部ヘルパー関数 (変更なし)
 static int get_st_games_from_level(HiyokuLevel level) {
     switch (level) {
         case HIYOKU_LV1: return 2;
@@ -170,8 +170,16 @@ static void perform_payout_addon(GameData* data, YakuType yaku) {
         snprintf(data->info_message, sizeof(data->info_message), "差枚数上乗せ +%d枚！", added_payout);
     }
 }
+
+// (★) transition_to_state を (★変更)
+// (★) この関数は at.c の外部 (main.c) からも呼ばれるため、static を外す (at.h で宣言が必要)
+// (★) → と思ったが、at.h で宣言すると at.h が game_data.h をインクルードする必要があり、循環参照の恐れ
+// (★) → やはり static のままにし、main.c は g_game_data.current_state を直接変更する
 static void transition_to_state(GameData* data, AT_State new_state) {
-    data->current_state = new_state;
+    
+    // (★) main.c がロジック状態 (g_current_logic_state) を更新するので、
+    // (★) この関数は data->current_state の更新のみを行う
+    data->current_state = new_state; 
     data->current_bonus_payout = 0; 
     snprintf(data->info_message, sizeof(data->info_message), "%s へ遷移", AT_GetStateName(new_state));
 
@@ -180,13 +188,25 @@ static void transition_to_state(GameData* data, AT_State new_state) {
         data->hiyoku_is_frozen = false;
     }
     
+    // (★追加) 新しい状態が「ボーナス高確率」なら、内部ステップを初期化
+    if (new_state == STATE_BONUS_HIGH_PROB) {
+        data->at_step = AT_STEP_WAIT_LEVER1;
+        // (★) G数はここで設定「しない」(遷移元から引き継ぐか、新規に設定)
+    } else {
+        // (★) AT高確率以外に遷移する場合、ステップをリセット
+        data->at_step = AT_STEP_NONE;
+    }
+    
     switch (new_state) {
         case STATE_BB_INITIAL:
             data->target_bonus_payout = PAYOUT_TARGET_BB_INITIAL;
             break;
         case STATE_BONUS_HIGH_PROB:
             data->target_bonus_payout = 0; 
-            data->bonus_high_prob_games = GAMES_ON_BB_INITIAL_END;
+            // (★) G数が 0 以下の場合 (BB_INITIALから来た場合など) のみG数を設定
+            if (data->bonus_high_prob_games <= 0) { 
+                 data->bonus_high_prob_games = GAMES_ON_BB_INITIAL_END;
+            }
             break;
         case STATE_BB_HIGH_PROB:
             data->target_bonus_payout = PAYOUT_TARGET_BB_HIGH_PROB;
@@ -432,70 +452,9 @@ static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
         }
     }
 }
-static bool roll_high_prob_success(YakuType yaku) {
-    int r = rand() % 1000;
-    switch (yaku) {
-        case YAKU_REPLAY:       return r < 318; // 31.8%
-        case YAKU_COMMON_BELL:  return r < 379; // 37.9%
-        default:
-            if (IsRareYaku(yaku)) return true;
-            return false;
-    }
-}
-static bool perform_bonus_allocation(GameData* data, YakuType yaku) {
-    if (!roll_high_prob_success(yaku)) {
-        return false;
-    }
-
-    int r = rand() % 1000; 
-    switch (yaku) {
-        case YAKU_REPLAY: 
-            if (r < 370) transition_to_state(data, STATE_FRANXX_BONUS); 
-            else if (r < 870) transition_to_state(data, STATE_BB_HIGH_PROB); 
-            else { BB_EX_Init(data); transition_to_state(data, STATE_BB_EX); }
-            break;
-        case YAKU_COMMON_BELL: 
-            if (r < 380) transition_to_state(data, STATE_FRANXX_BONUS); 
-            else if (r < 870) transition_to_state(data, STATE_BB_HIGH_PROB); 
-            else { BB_EX_Init(data); transition_to_state(data, STATE_BB_EX); }
-            break;
-        case YAKU_CHANCE_ME: 
-            if (r < 1) transition_to_state(data, STATE_EPISODE_BONUS); 
-            else if (r < 201) { BB_EX_Init(data); transition_to_state(data, STATE_BB_EX); } 
-            else transition_to_state(data, STATE_BB_HIGH_PROB); 
-            break;
-        case YAKU_CHERRY: 
-            if (r < 500) transition_to_state(data, STATE_FRANXX_BONUS); 
-            else if (r < 900) transition_to_state(data, STATE_BB_HIGH_PROB); 
-            else { BB_EX_Init(data); transition_to_state(data, STATE_BB_EX); }
-            break;
-        case YAKU_FRANXX_ME: 
-            if (r < 1) transition_to_state(data, STATE_EPISODE_BONUS); 
-            else if (r < 376) { BB_EX_Init(data); transition_to_state(data, STATE_BB_EX); } 
-            else if (r < 751) transition_to_state(data, STATE_BB_HIGH_PROB); 
-            else transition_to_state(data, STATE_FRANXX_BONUS); 
-            break;
-        case YAKU_STRELITZIA_ME: 
-            if (r < 4) transition_to_state(data, STATE_EPISODE_BONUS); 
-            else { BB_EX_Init(data); transition_to_state(data, STATE_BB_EX); } 
-            break;
-        default:
-            return false;
-    }
-    return true;
-}
-static void handle_bonus_high_prob(GameData* data, YakuType yaku) {
-    data->bonus_high_prob_games--;
-
-    bool bonus_won = false;
-    if (yaku == YAKU_REPLAY || yaku == YAKU_COMMON_BELL || IsRareYaku(yaku)) {
-        bonus_won = perform_bonus_allocation(data, yaku);
-    }
-
-    if (!bonus_won && data->bonus_high_prob_games <= 0) {
-        transition_to_state(data, STATE_AT_END);
-    }
-}
+// (★) handle_bonus_high_prob (既存の関数) は削除
+// (★) roll_high_prob_success は lottery.c へ移動
+// (★) perform_bonus_allocation は lottery.c へ移動
 
 
 // --- 公開関数 (★修正済み) ---
@@ -537,9 +496,12 @@ void AT_ProcessStop(GameData* data, YakuType yaku, bool oshijun_success) {
         case STATE_TSUREDASHI:
             handle_payout_bonus(data, yaku, diff);
             break;
+            
+        // (★) STATE_BONUS_HIGH_PROB のロジックは main.c に移行したため、ここでは何もしない
         case STATE_BONUS_HIGH_PROB:
-            handle_bonus_high_prob(data, yaku);
+            // handle_bonus_high_prob(data, yaku); // (★削除)
             break;
+            
         case STATE_HIYOKU_BEATS:
             handle_hiyoku_beats(data, yaku); 
             break;

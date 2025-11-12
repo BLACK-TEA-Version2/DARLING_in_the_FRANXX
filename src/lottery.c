@@ -9,6 +9,12 @@ static inline unsigned rand_u16(void) {
     return (hi << 8) | lo;                  // 0..65535
 }
 
+// (★追加) 0〜999 (1000未満) の乱数を生成
+static inline int rand_1000(void) {
+    // (at.c の既存のロジックに合わせる)
+    return rand() % 1000;
+}
+
 // --- 役情報 (払い出し) ---
 int GetPayoutForYaku(YakuType yaku, bool oshijun_success) {
     switch (yaku) {
@@ -186,4 +192,92 @@ YakuType Lottery_GetResult_FranxxHighProb() {
     if (r < cumulative_prob) return YAKU_STRELITZIA_ME;
 
     return YAKU_HAZURE;
+}
+
+
+// =================================================================
+// (★新規) AT高確率状態用
+// =================================================================
+
+/**
+ * @brief (★新規) 【AT高確率状態】の確率テーブルに基づいて小役を抽選します。
+ * (注: 現状、適切なAT中テーブルがないため、通常時テーブルを流用します)
+ */
+YakuType Lottery_GetResult_AT(void) {
+    // TODO: AT専用の抽選テーブルを実装する
+    //
+    // 仕様 4: 「完全なハズレ（ボーナス当否の抽選を一切行わない子役）」
+    // を実装するため、ここではダミーとして 50% で YAKU_HAZURE (抽選対象外) を返す
+    if (rand_1000() < 500) {
+        return YAKU_HAZURE;
+    }
+    
+    // 残り 50% で通常時の抽選を行う (YAKU_HAZURE 以外)
+    YakuType yaku;
+    do {
+        yaku = Lottery_GetResult_Normal();
+    } while (yaku == YAKU_HAZURE);
+    
+    return yaku;
+}
+
+/**
+ * @brief (★新規) AT高確率状態でのボーナス当否判定 (at.c からロジック移植)
+ */
+AT_BonusResultType Lottery_CheckBonus_AT(YakuType yaku) {
+    // (at.c の roll_high_prob_success 相当)
+    int r_success = rand_1000();
+    bool is_success = false;
+    switch (yaku) {
+        case YAKU_REPLAY:       is_success = (r_success < 318); break; // 31.8%
+        case YAKU_COMMON_BELL:  is_success = (r_success < 379); break; // 37.9%
+        default:
+            if (IsRareYaku(yaku)) is_success = true; // レア役は 100% 当選
+            break;
+    }
+
+    // 仕様 4: 「抽選対象役」かどうか
+    // = 当否抽選の対象になったか？
+    if (!is_success) {
+        // (YAKU_HAZURE や、抽選に漏れたリプ/ベル)
+        
+        // (★) 抽選対象役 (リプ/ベル) だったが抽選に漏れた場合
+        if (yaku == YAKU_REPLAY || yaku == YAKU_COMMON_BELL) {
+            return BONUS_AT_CONTINUE; // 演出対象
+        }
+        
+        // (★) そもそも抽選対象外 (ハズレ、押し順ベルなど)
+        return BONUS_NONE;
+    }
+
+    // --- 当選確定 ---
+    // (at.c の perform_bonus_allocation 相当の種別振り分け)
+    int r_type = rand_1000(); 
+    
+    switch (yaku) {
+        case YAKU_REPLAY: 
+        case YAKU_COMMON_BELL: 
+            if (r_type < 370) return BONUS_FRANXX; 
+            else return BONUS_DARLING; // (BB_EXはダーリンボーナスとして扱う)
+        
+        case YAKU_CHANCE_ME: 
+            return BONUS_DARLING; // (EPボーナス/BB_EXはダーリンボーナスとして扱う)
+        
+        case YAKU_CHERRY: 
+            if (r_type < 500) return BONUS_FRANXX; 
+            else return BONUS_DARLING; // (BB_EXはダーリンボーナスとして扱う)
+        
+        case YAKU_FRANXX_ME: 
+            if (r_type < 751) return BONUS_DARLING; // (EP/BB_EXはダーリンボーナスとして扱う)
+            else return BONUS_FRANXX; 
+        
+        case YAKU_STRELITZIA_ME: 
+        case YAKU_HP_REVERSE_STRONG_FRANXX: // (AT中には来ないが念のため)
+        case YAKU_HP_REVERSE_STRELITZIA:    // (AT中には来ないが念のため)
+            return BONUS_DARLING; // (EP/BB_EXはダーリンボーナスとして扱う)
+        
+        default:
+            // (抽選対象役だが、振り分けにない = 落選)
+            return BONUS_AT_CONTINUE; 
+    }
 }
