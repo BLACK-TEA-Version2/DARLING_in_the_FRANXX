@@ -452,9 +452,9 @@ void Reel_Draw(SDL_Renderer* renderer, int screen_width, int screen_height) {
         // (★) リールごとのX座標オフセットを追加
         int x_offset = 0;
         if (r == 0) {      // 左リール
-            x_offset = 2;  // 右に2pxずらす
+            x_offset = 10;  // 右に2pxずらす
         } else if (r == 2) { // 右リール
-            x_offset = -2; // 左に2pxずらす
+            x_offset = -10; // 左に2pxずらす
         }
         // 中央(r=1)は x_offset = 0
 
