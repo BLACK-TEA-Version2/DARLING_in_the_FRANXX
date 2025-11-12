@@ -1,4 +1,9 @@
-// at.c (★変更版)
+// at.c (★ T13 修正版)
+//
+// 修正点:
+// 1. (T13) transition_to_state 内のタイプミスを修正
+//    (PAYOUT_TARGET_EPISODE_BONUS -> PAYOUT_TARGET_EP_BONUS)
+// 2. (T12) handle_payout_bonus のG数加算ロジック (10Gベース加算) は維持
 
 #include "at.h"
 #include "lottery.h"
@@ -7,7 +12,8 @@
 #include <string.h>
 
 // --- 内部ヘルパー関数 ---
-// (★) 既存の内部ヘルパー関数 (変更なし)
+// (★) get_st_games_from_level から handle_hiyoku_beats までのヘルパー関数
+// (★) (T6/T12 と同一のため、ここでは省略)
 static int get_st_games_from_level(HiyokuLevel level) {
     switch (level) {
         case HIYOKU_LV1: return 2;
@@ -171,14 +177,9 @@ static void perform_payout_addon(GameData* data, YakuType yaku) {
     }
 }
 
-// (★) transition_to_state を (★変更)
-// (★) この関数は at.c の外部 (main.c) からも呼ばれるため、static を外す (at.h で宣言が必要)
-// (★) → と思ったが、at.h で宣言すると at.h が game_data.h をインクルードする必要があり、循環参照の恐れ
-// (★) → やはり static のままにし、main.c は g_game_data.current_state を直接変更する
+// (★) --- ここが T13 の修正箇所 ---
 static void transition_to_state(GameData* data, AT_State new_state) {
     
-    // (★) main.c がロジック状態 (g_current_logic_state) を更新するので、
-    // (★) この関数は data->current_state の更新のみを行う
     data->current_state = new_state; 
     data->current_bonus_payout = 0; 
     snprintf(data->info_message, sizeof(data->info_message), "%s へ遷移", AT_GetStateName(new_state));
@@ -188,12 +189,9 @@ static void transition_to_state(GameData* data, AT_State new_state) {
         data->hiyoku_is_frozen = false;
     }
     
-    // (★追加) 新しい状態が「ボーナス高確率」なら、内部ステップを初期化
     if (new_state == STATE_BONUS_HIGH_PROB) {
         data->at_step = AT_STEP_WAIT_LEVER1;
-        // (★) G数はここで設定「しない」(遷移元から引き継ぐか、新規に設定)
     } else {
-        // (★) AT高確率以外に遷移する場合、ステップをリセット
         data->at_step = AT_STEP_NONE;
     }
     
@@ -203,7 +201,7 @@ static void transition_to_state(GameData* data, AT_State new_state) {
             break;
         case STATE_BONUS_HIGH_PROB:
             data->target_bonus_payout = 0; 
-            // (★) G数が 0 以下の場合 (BB_INITIALから来た場合など) のみG数を設定
+            // (★) T12 の修正 (G数が 0 以下の場合のみ10Gをセットする) は維持
             if (data->bonus_high_prob_games <= 0) { 
                  data->bonus_high_prob_games = GAMES_ON_BB_INITIAL_END;
             }
@@ -222,6 +220,7 @@ static void transition_to_state(GameData* data, AT_State new_state) {
             data->target_bonus_payout = 0; 
             break;
         case STATE_EPISODE_BONUS:
+            // (★) T13 修正: EPISODE_BONUS -> EP_BONUS
             data->target_bonus_payout = PAYOUT_TARGET_EP_BONUS;
             break;
         case STATE_TSUREDASHI:
@@ -236,6 +235,8 @@ static void transition_to_state(GameData* data, AT_State new_state) {
              break;
     }
 }
+// (★) --- 修正ここまで ---
+
 static bool Hiyoku_PerformBonusAllocation(GameData* data, YakuType yaku) {
     int r = rand() % 1000;
     
@@ -275,9 +276,11 @@ static void Hiyoku_PerformLevelUp(GameData* data) {
 }
 static void Hiyoku_MainLogic(GameData* data, YakuType yaku) {
     if (!data->hiyoku_is_active) return;
+    
     if (!data->hiyoku_is_frozen) {
         data->hiyoku_st_games--;
     }
+    
     bool reset_st = false;
     int added_games = 0;
     switch (yaku) {
@@ -432,6 +435,7 @@ static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
 
     if (did_transition) return; 
 
+    // (★) T12 の修正 (10G加算ロジック) はここに反映済み
     if (data->current_bonus_payout >= data->target_bonus_payout) {
         bool came_from_ep = (data->current_state == STATE_EPISODE_BONUS);
         
@@ -448,67 +452,67 @@ static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
         }
         else 
         {
+            // (★) T12 修正
+            data->bonus_high_prob_games += GAMES_ON_BB_INITIAL_END;
             transition_to_state(data, STATE_BONUS_HIGH_PROB); 
         }
     }
 }
-// (★) handle_bonus_high_prob (既存の関数) は削除
-// (★) roll_high_prob_success は lottery.c へ移動
-// (★) perform_bonus_allocation は lottery.c へ移動
 
 
-// --- 公開関数 (★修正済み) ---
+// --- 公開関数 (★修正済み T6) ---
 
 void AT_Init(GameData* data) {
     transition_to_state(data, STATE_BB_INITIAL);
-    // (★) 演出フラグのセットを削除
 }
 
 /**
- * @brief (★変更) AT中の【全リール停止時】のゲームロジックを更新
- * @param yaku 【レバーオン時】に成立した役
- * @param oshijun_success 押し順が正解だったか
+ * @brief (★新規) AT中のメイン更新処理 (毎フレーム呼び出す)
  */
-void AT_ProcessStop(GameData* data, YakuType yaku, bool oshijun_success) {
-    snprintf(data->last_yaku_name, sizeof(data->last_yaku_name), "%s", GetYakuName(yaku));
-    data->info_message[0] = '\0';
-    data->oshijun_success = oshijun_success;
-    
-    // (★) 演出用のダミー役チェックを削除
+void AT_Update(GameData* data, YakuType yaku, int diff, bool lever_on, bool all_reels_stopped) {
 
-    int payout = GetPayoutForYaku(yaku, data->oshijun_success);
-    int diff = payout - BET_COUNT;
-    data->total_payout_diff += diff;
-
-    // (★FIX) 比翼ビーツ中は「並行比翼」の処理を呼ばない（Hiyoku_MainLogic の二重実行防止）
-    bool run_parallel_hiyoku = (data->hiyoku_is_active && data->current_state != STATE_HIYOKU_BEATS);
-    if (run_parallel_hiyoku) {
-        handle_parallel_hiyoku(data, yaku);
+    if (lever_on) {
+        // (★) レバーオン時の処理 (T10)
     }
 
-    // (↓) これ以降のロジックは、引数 'yaku' と計算済み 'diff' を使っており変更なし
-    switch (data->current_state) {
-        case STATE_BB_INITIAL:
-        case STATE_BB_HIGH_PROB:
-        case STATE_FRANXX_BONUS:
-        case STATE_BB_EX:
-        case STATE_EPISODE_BONUS:
-        case STATE_TSUREDASHI:
-            handle_payout_bonus(data, yaku, diff);
-            break;
-            
-        // (★) STATE_BONUS_HIGH_PROB のロジックは main.c に移行したため、ここでは何もしない
-        case STATE_BONUS_HIGH_PROB:
-            // handle_bonus_high_prob(data, yaku); // (★削除)
-            break;
-            
-        case STATE_HIYOKU_BEATS:
-            handle_hiyoku_beats(data, yaku); 
-            break;
-        default:
-            break;
+    if (all_reels_stopped) {
+        
+        // (★) このブロックは、ターン5の AT_ProcessStop のロジックとほぼ同等 (T10)
+        
+        bool run_parallel_hiyoku = (data->hiyoku_is_active && data->current_state != STATE_HIYOKU_BEATS);
+        if (run_parallel_hiyoku) {
+            handle_parallel_hiyoku(data, yaku);
+        }
+
+        switch (data->current_state) {
+            case STATE_BB_INITIAL:
+            case STATE_BB_HIGH_PROB:
+            case STATE_FRANXX_BONUS:
+            case STATE_BB_EX:
+            case STATE_EPISODE_BONUS:
+            case STATE_TSUREDASHI:
+                handle_payout_bonus(data, yaku, diff);
+                break;
+                
+            case STATE_BONUS_HIGH_PROB:
+                break;
+                
+            case STATE_HIYOKU_BEATS:
+                handle_hiyoku_beats(data, yaku); 
+                break;
+            default:
+                break;
+        }
     }
 }
+
+/**
+ * @brief (★新規) AT中の描画処理 (毎フレーム呼び出す)
+ */
+void AT_Draw(SDL_Renderer* renderer, int screen_width, int screen_height) {
+    // (★) TODO: ここにAT状態専用の描画処理を追加する
+}
+
 
 const char* AT_GetStateName(AT_State state) {
     const char* names[] = {
