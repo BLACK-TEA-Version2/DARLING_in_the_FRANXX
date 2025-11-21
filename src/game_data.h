@@ -1,9 +1,9 @@
 #ifndef GAME_DATA_H
 #define GAME_DATA_H
 
-#include "common.h" // AT_State, YakuType のため
-#include "video_defs.h" // (★追加) VideoType のため
-#include <SDL2/SDL_stdinc.h> // (★追加) Uint32 のため
+#include "common.h" 
+#include "video_defs.h" 
+#include <SDL2/SDL_stdinc.h> 
 
 // --- 比翼BEATSレベル ---
 typedef enum {
@@ -13,10 +13,10 @@ typedef enum {
 } HiyokuLevel;
 
 // =================================================================
-// (★追加) AT高確率状態の内部ステップ定義
+// (★) AT高確率状態の内部ステップ定義
 // =================================================================
 typedef enum {
-    AT_STEP_NONE,             // AT高確率状態ではない (★コンパイルエラー 'AT_STEP_NONE' undeclared 対策)
+    AT_STEP_NONE,             // AT高確率状態ではない
     AT_STEP_WAIT_LEVER1,      // (1) 1回目レバーオン待ち
     AT_STEP_REEL_SPIN,        // (1) リール回転中
     AT_STEP_LOOP_VIDEO_INTRO, // (2) 専用演出（導入）再生中
@@ -25,22 +25,24 @@ typedef enum {
 } AtStep;
 
 // =================================================================
-// (★追加) AT高確率状態のボーナス抽選結果
+// (★修正) AT高確率状態のボーナス抽選結果
 // =================================================================
 typedef enum {
     BONUS_NONE,         // ハズレ (抽選対象外役)
     BONUS_AT_CONTINUE,  // 落選 (AT継続)
     BONUS_DARLING,      // 当選 (ダーリンインザボーナス)
-    BONUS_FRANXX        // 当選 (フランクスボーナス)
+    BONUS_FRANXX,       // 当選 (フランクスボーナス)
+    BONUS_BB_EX,        // (★追加) BB EX
+    BONUS_EPISODE       // (★追加) エピソードボーナス
 } AT_BonusResultType;
 
 // =================================================================
-// (★追加) リール強制停止パターン定義
+// (★修正) リール強制停止パターン定義
 // =================================================================
 typedef enum {
     REEL_PATTERN_NONE,
     REEL_PATTERN_RED7_MID,      // 中段 赤7揃い
-    REEL_PATTERN_FRANXX_BONUS   // 左中:赤7中段, 右:UE/NAKA
+    REEL_PATTERN_FRANXX_BONUS   // 左中:赤7, 右:SHITA (★修正: BARではなくSHITA)
 } ReelForceStopPattern;
 
 
@@ -74,11 +76,11 @@ typedef struct {
     bool oshijun_success;     // そのゲームで押し順に成功したか
 
     // =================================================================
-    // (★追加) 7. AT高確率状態 演出制御データ
+    // 7. AT高確率状態 演出制御データ
     // =================================================================
     AtStep at_step;                 // AT高確率状態の内部ステップ
     AT_BonusResultType at_bonus_result; // 1回目レバーオン時のボーナス抽選結果
-    YakuType at_last_lottery_yaku;  // 1回目レバーオン時の成立役 (at_step 進行中も保持)
+    YakuType at_last_lottery_yaku;  // 1回目レバーオン時の成立役
     
     // 演出動画ペア
     VideoType at_pres_intro_id;
@@ -86,10 +88,9 @@ typedef struct {
     
     // 当落演出用タイマー
     Uint32 at_judge_video_start_time;
-    Uint32 at_judge_video_duration_ms; // 当落動画の再生時間 (仮)
+    Uint32 at_judge_video_duration_ms; // 当落動画の再生時間
     bool at_judge_timing_reverse_triggered;
     bool at_judge_timing_stop_triggered;
-
 
 } GameData;
 

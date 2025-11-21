@@ -1,11 +1,5 @@
 /*
- * (★) 修正版 src/main.c (T10 最終版)
- *
- * 修正点:
- * 1. (T4, T6の設計) AT_ProcessStop の呼び出しを完全に削除。
- * 2. (T4, T6の設計) メインループで AT_Update を毎フレーム呼び出すように変更。
- * 3. (T4, T6の設計) OnReelsStopped から差枚計算ロジックを削除し、メインループに移管。
- * 4. (T9の修正) レバーオン時のロジック順序を修正し、遷移動画のスキップを防止。
+ * (★) 修正版 src/main.c (フェーズ1完了版)
  */
 
 #include <stdio.h>
@@ -22,26 +16,22 @@
 #include "cz.h"
 #include "at.h"
 
-// (★) presentation.h をインクルード
 #include "presentation.h" 
 
 #define SCREEN_WIDTH 838
 #define SCREEN_HEIGHT 600
-#define FONT_PATH "font.ttf" // (★) 環境に合わせて要変更
+#define FONT_PATH "font.ttf" 
 #define FONT_SIZE 24         
-#define CONFIG_PATH "media.cfg" // (★) 設定ファイルのパス
+#define CONFIG_PATH "media.cfg" 
 
-// (★) --- メインループの状態定義 (★変更) ---
+// --- メインループの状態定義 ---
 typedef enum {
-    STATE_WAIT_LEVER,           // 1. (入力可能) ループ動画再生中、レバー待ち (通常/AT1回目)
-    STATE_REELS_SPINNING,       // 2. (入力可能) ループ動画再生中、リール停止待ち (通常/AT1回目)
-    STATE_PLAYING_TRANSITION,   // 3. (リール停止ブロック) 遷移動画再生中、リール回転
-
-    // (★) AT高確率状態 専用ステップ (仕様で定義されたフロー)
-    STATE_AT_PRES_INTRO,        // 4. (入力不可) 専用演出(導入) 再生中
-    STATE_AT_PRES_LOOP,         // 5. (入力可能) 専用演出(ループ) 再生中 (★2回目レバー待ち)
-    STATE_AT_JUDGE,             // 6. (入力不可) 当落演出 再生中 (リール停止・逆回転含む)
-
+    STATE_WAIT_LEVER,           
+    STATE_REELS_SPINNING,       
+    STATE_PLAYING_TRANSITION,   
+    STATE_AT_PRES_INTRO,        
+    STATE_AT_PRES_LOOP,         
+    STATE_AT_JUDGE,             
 } MainLoopState;
 
 // --- グローバル変数 ---
@@ -51,16 +41,15 @@ static int g_stop_order_counter = 1;
 static bool g_reel_stop_flags[3] = {false, false, false};
 static int g_actual_push_order[3] = {-1, -1, -1};
 
-// (★) --- 状態管理用グローバル変数 (重要) ---
-static MainLoopState g_main_state;              // 演出・操作の状態
-static AT_State g_current_logic_state = STATE_NORMAL; // ロジック(内部)の状態
-static AT_State g_current_media_state = STATE_NORMAL; // 再生中動画(演出)の状態
-static bool g_is_first_game = true;             // 1G目 (強制AT) フラグ
+// --- 状態管理用グローバル変数 ---
+static MainLoopState g_main_state;              
+static AT_State g_current_logic_state = STATE_NORMAL; 
+static AT_State g_current_media_state = STATE_NORMAL; 
+static bool g_is_first_game = true;             
 
 
-// (★) --- 演出ヘルパー関数 (★変更) ---
+// --- 演出ヘルパー関数 ---
 
-// (★) VideoType (enum) から MediaConfig のキー名を取得するヘルパー
 static const char* GetVideoKey(VideoType type) {
     switch(type) {
         case VIDEO_IDLE: return "LOOP_VIDEO_NORMAL";
@@ -88,7 +77,6 @@ static const char* GetVideoKey(VideoType type) {
     }
 }
 
-// (★) Presentation_Play にキー名で再生を要求するラッパー
 static bool PlayVideoByKey(const char* key, bool loop) {
     if (!key) return false;
     const char* path = MediaConfig_GetPath(key);
@@ -99,9 +87,6 @@ static bool PlayVideoByKey(const char* key, bool loop) {
     return false;
 }
 
-/**
- * @brief (★) AT_State (ゲームロジック) から「状態ループ」のキー名を取得
- */
 static const char* GetLoopKeyForState(AT_State state) {
     switch (state) {
         case STATE_NORMAL:          return "LOOP_VIDEO_NORMAL";
@@ -116,15 +101,12 @@ static const char* GetLoopKeyForState(AT_State state) {
         case STATE_TSUREDASHI:      return "LOOP_VIDEO_TSUREDASHI";
         case STATE_AT_END:          return "LOOP_VIDEO_AT_END";
         default:
-            return "LOOP_VIDEO_NORMAL"; // 不明な場合は NORMAL にフォールバック
+            return "LOOP_VIDEO_NORMAL"; 
     }
 }
 
-/**
- * @brief (★) 遷移「元」と「先」から「遷移演出」のキー名を作成
- */
 static const char* GetTransitionKey(AT_State from, AT_State to) {
-    static char transition_key_buffer[256]; // 静的バッファ
+    static char transition_key_buffer[256]; 
     const char* from_key = "NORMAL";
     const char* to_key = "NORMAL";
     switch(from) {
@@ -159,21 +141,18 @@ static const char* GetTransitionKey(AT_State from, AT_State to) {
     return transition_key_buffer;
 }
 
-// (★) --- AT高確率状態 ヘルパー (新規追加) ---
+// --- AT高確率状態 ヘルパー ---
 static void SelectPresentationPair(GameData* data) {
     int k = rand() % 100; 
     VideoType intro, loop;
+    // (簡易実装)
     if (data->at_bonus_result == BONUS_AT_CONTINUE) {
         if (k < 40) { intro = VIDEO_AT_PRES_A_INTRO; loop = VIDEO_AT_PRES_A_LOOP; }
         else if (k < 70) { intro = VIDEO_AT_PRES_B_INTRO; loop = VIDEO_AT_PRES_B_LOOP; }
         else if (k < 90) { intro = VIDEO_AT_PRES_C_INTRO; loop = VIDEO_AT_PRES_C_LOOP; }
         else { intro = VIDEO_AT_PRES_D_INTRO; loop = VIDEO_AT_PRES_D_LOOP; }
-    } else if (data->at_bonus_result == BONUS_DARLING) {
-        if (k < 10) { intro = VIDEO_AT_PRES_A_INTRO; loop = VIDEO_AT_PRES_A_LOOP; }
-        else if (k < 30) { intro = VIDEO_AT_PRES_B_INTRO; loop = VIDEO_AT_PRES_B_LOOP; }
-        else if (k < 70) { intro = VIDEO_AT_PRES_C_INTRO; loop = VIDEO_AT_PRES_C_LOOP; }
-        else { intro = VIDEO_AT_PRES_D_INTRO; loop = VIDEO_AT_PRES_D_LOOP; }
-    } else { // BONUS_FRANXX
+    } else { 
+        // 当選時は期待度高めの演出を選びやすくする
         if (k < 5) { intro = VIDEO_AT_PRES_A_INTRO; loop = VIDEO_AT_PRES_A_LOOP; }
         else if (k < 20) { intro = VIDEO_AT_PRES_B_INTRO; loop = VIDEO_AT_PRES_B_LOOP; }
         else if (k < 50) { intro = VIDEO_AT_PRES_C_INTRO; loop = VIDEO_AT_PRES_C_LOOP; }
@@ -182,39 +161,34 @@ static void SelectPresentationPair(GameData* data) {
     data->at_pres_intro_id = intro;
     data->at_pres_loop_id = loop;
 }
+
 static VideoType SelectJudgmentVideo(GameData* data) {
     int k = rand() % 3; 
     data->at_judge_video_duration_ms = 5000; 
+    
     if (data->at_bonus_result == BONUS_AT_CONTINUE) {
         const VideoType videos[] = {VIDEO_JUDGE_LOSE_1, VIDEO_JUDGE_LOSE_2, VIDEO_JUDGE_LOSE_3};
         return videos[k];
-    } else if (data->at_bonus_result == BONUS_DARLING) {
-        const VideoType videos[] = {VIDEO_JUDGE_DARLING_1, VIDEO_JUDGE_DARLING_2, VIDEO_JUDGE_DARLING_3};
-        return videos[k];
-    } else { // BONUS_FRANXX
+    } else if (data->at_bonus_result == BONUS_FRANXX) {
         const VideoType videos[] = {VIDEO_JUDGE_FRANXX_1, VIDEO_JUDGE_FRANXX_2, VIDEO_JUDGE_FRANXX_3};
+        return videos[k];
+    } else { 
+        // DARLING, BB_EX, EPISODE は共通演出 (ダーリンボーナス当選演出)
+        const VideoType videos[] = {VIDEO_JUDGE_DARLING_1, VIDEO_JUDGE_DARLING_2, VIDEO_JUDGE_DARLING_3};
         return videos[k];
     }
 }
 
 
-/**
- * @brief (★) 通常のレバーオン処理（ロジック部） (★変更)
- */
 static void DoLeverLogic() {
     
-    // (★) 1G目（強制AT）の処理
     if (g_is_first_game) {
         printf("1G目です。AT_Init() を呼び出し、強制的にATに突入させます。\n");
         AT_Init(&g_game_data); 
         g_current_yaku = YAKU_HAZURE; 
         g_is_first_game = false;
-        
-        // (★) 1G目も AT_Update を呼ぶためにロジック状態を更新
         g_current_logic_state = g_game_data.current_state; 
     } else {
-    // (★) 2G目以降の通常の抽選
-        
         if (g_game_data.current_state == STATE_BONUS_HIGH_PROB) {
             fprintf(stderr, "エラー: DoLeverLogic が AT高確率状態 (1回目レバー) で呼ばれました。\n");
             g_current_yaku = Lottery_GetResult_Normal();
@@ -245,19 +219,13 @@ static void DoLeverLogic() {
     g_actual_push_order[2] = -1;
 }
 
-/**
- * @brief (★) 全リール停止時の処理（ロジック更新） (★変更)
- * (★) T10 修正: AT_ProcessStop の呼び出しを削除
- */
-static void OnReelsStopped(bool oshijun_success) { // (★) 押し順結果をメインループから受け取る
-
-    // (★) AT中の差枚計算や状態更新は、メインループの AT_Update が担当するため、ここでは何もしない
+static void OnReelsStopped(bool oshijun_success) { 
 
     if (g_game_data.current_state == STATE_CZ)
     {
         CZ_Update(&g_game_data, g_current_yaku);
     }
-    else if (g_game_data.current_state == STATE_NORMAL) // (★) AT中以外の時だけ
+    else if (g_game_data.current_state == STATE_NORMAL) 
     {
         Normal_Update(&g_game_data, g_current_yaku);
     }
@@ -266,14 +234,11 @@ static void OnReelsStopped(bool oshijun_success) { // (★) 押し順結果を�
          snprintf(g_game_data.info_message, sizeof(g_game_data.info_message), "押し順ミス！");
     }
 
-    // (★) ロジックの内部状態を更新 (AT中の場合は AT_Update がさらに更新する)
     g_current_logic_state = g_game_data.current_state;
 }
 
 
-// (★) main関数は SDL_main にリネーム
 int SDL_main(int argc, char* args[]) {
-    // --- 1. 初期化 ---
     if (!init_sdl("Slot Simulator", SCREEN_WIDTH, SCREEN_HEIGHT) ||
         !load_media(FONT_PATH, FONT_SIZE)) { 
         close_sdl();
@@ -308,34 +273,26 @@ int SDL_main(int argc, char* args[]) {
     Presentation_Play(gRenderer, loop_path, true);
     g_main_state = STATE_WAIT_LEVER;
 
-    // --- 2. メインループ ---
     bool quit = false;
     SDL_Event e;
     while (!quit) {
         
-        // (★) T10 修正: AT_Update に渡すためのフラグを毎フレームリセット
         bool lever_on_this_frame = false;
 
-        // --- 3. イベント処理 ---
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) quit = true;
             
             if (e.type == SDL_KEYDOWN) {
-                // (★) レバーオン
                 if (e.key.keysym.sym == SDLK_SPACE) {
                     if (g_current_logic_state == STATE_AT_END) continue;
 
-                    // (★) ----------------------------------------------------
-                    // (★) T9 修正: 状態遷移の判定を、AT高確のロジックより「先」に行う
-                    // (★) ----------------------------------------------------
-
-                    // (★) AT高確率状態の【2回目レバーオン】 (これは専用の MainState なので、先に判定してOK)
+                    // (★) AT高確率状態の【2回目レバーオン】
                     if (g_current_logic_state == STATE_BONUS_HIGH_PROB && 
                         g_game_data.at_step == AT_STEP_LOOP_VIDEO_MAIN && 
                         g_main_state == STATE_AT_PRES_LOOP)
                     {
                         printf("AT高確: 2回目レバーオン\n");
-                        lever_on_this_frame = true; // (★) T10 修正: フラグ立て
+                        lever_on_this_frame = true; 
                         
                         VideoType judgeVideoId = SelectJudgmentVideo(&g_game_data);
                         const char* video_key = GetVideoKey(judgeVideoId);
@@ -347,29 +304,17 @@ int SDL_main(int argc, char* args[]) {
                             g_game_data.at_judge_timing_reverse_triggered = false;
                             g_game_data.at_judge_timing_stop_triggered = false;
                         } else {
-                            // (★) 動画再生失敗時は、即時結果反映 (フォールバック)
-                            if (g_game_data.at_bonus_result == BONUS_AT_CONTINUE) {
-                                g_game_data.at_step = AT_STEP_WAIT_LEVER1;
-                                g_main_state = STATE_WAIT_LEVER;
-                            } else if (g_game_data.at_bonus_result == BONUS_DARLING) {
-                                g_current_logic_state = STATE_BB_HIGH_PROB;
-                                g_game_data.current_state = STATE_BB_HIGH_PROB; 
-                                g_main_state = STATE_WAIT_LEVER;
-                            } else { // FRANXX
-                                g_current_logic_state = STATE_FRANXX_BONUS;
-                                g_game_data.current_state = STATE_FRANXX_BONUS; 
-                                g_main_state = STATE_WAIT_LEVER;
-                            }
+                            // 動画再生失敗時のフォールバック
+                            g_main_state = STATE_WAIT_LEVER; // 強制的に次に進める
                         }
                     }
-                    // (★) 1回目レバーオン、または通常レバーオン (状態遷移判定を含む)
                     else if (g_main_state == STATE_WAIT_LEVER) 
                     {
-                        // (★) 判定1: 状態遷移が必要か？ (ロジックとメディアが不一致)
+                        // 状態遷移判定
                         if (g_current_logic_state != g_current_media_state) {
                             
                             printf("通常レバーオン (状態遷移)\n");
-                            lever_on_this_frame = true; // (★) T10 修正: フラグ立て
+                            lever_on_this_frame = true; 
                             const char* trans_key = GetTransitionKey(g_current_media_state, g_current_logic_state);
                             
                             if (PlayVideoByKey(trans_key, false)) { 
@@ -377,15 +322,14 @@ int SDL_main(int argc, char* args[]) {
                                 DoLeverLogic(); 
                                 g_main_state = STATE_PLAYING_TRANSITION; 
                             } else {
-                                // (★) 遷移動画が定義されていない
                                 fprintf(stderr, "遷移演出 [%s] が未定義です。即時ループを切り替えます。\n", trans_key);
                                 g_current_media_state = g_current_logic_state;
                                 const char* loop_path = MediaConfig_GetPath(GetLoopKeyForState(g_current_media_state));
                                 Presentation_Play(gRenderer, loop_path, true);
                                 
-                                // (★) 状態が一致したので、このまま AT高確 or 通常のロジックを実行
                                 if (g_current_logic_state == STATE_BONUS_HIGH_PROB && g_game_data.at_step == AT_STEP_WAIT_LEVER1) {
-                                    printf("AT高確: 1回目レバーオン (遷移動画スキップ)\n");
+                                    // スキップ時のAT高確1回目レバー処理
+                                    printf("AT高確: 1回目レバーオン (スキップ)\n");
                                     g_game_data.bonus_high_prob_games--;
                                     snprintf(g_game_data.info_message, sizeof(g_game_data.info_message), "AT 残り %dG", g_game_data.bonus_high_prob_games);
                                     g_current_yaku = Lottery_GetResult_AT();
@@ -400,15 +344,14 @@ int SDL_main(int argc, char* args[]) {
                                     g_game_data.at_step = AT_STEP_REEL_SPIN;
                                     g_main_state = STATE_REELS_SPINNING;
                                 } else {
-                                    printf("通常レバーオン (遷移動画スキップ)\n");
+                                    printf("通常レバーオン (スキップ)\n");
                                     DoLeverLogic();
                                     g_main_state = STATE_REELS_SPINNING;
                                 }
                             }
                         }
-                        // (★) 判定2: 状態遷移が不要 (ロジックとメディアが一致)
                         else {
-                            lever_on_this_frame = true; // (★) T10 修正: フラグ立て
+                            lever_on_this_frame = true; 
                             
                             // (★) AT高確率状態の【1回目レバーオン】
                             if (g_current_logic_state == STATE_BONUS_HIGH_PROB && 
@@ -429,7 +372,6 @@ int SDL_main(int argc, char* args[]) {
                                 g_game_data.at_step = AT_STEP_REEL_SPIN;
                                 g_main_state = STATE_REELS_SPINNING;
                             }
-                            // (★) 通常のレバーオン
                             else 
                             {
                                 printf("通常レバーオン (状態一致)\n");
@@ -438,9 +380,8 @@ int SDL_main(int argc, char* args[]) {
                             }
                         }
                     }
-                } // (★) --- ここまでレバーオン修正 ---
+                } 
 
-                // (★) リール停止
                 if (e.key.keysym.sym == SDLK_z || e.key.keysym.sym == SDLK_x || e.key.keysym.sym == SDLK_c) {
                     
                     if (g_main_state == STATE_REELS_SPINNING) {
@@ -456,23 +397,18 @@ int SDL_main(int argc, char* args[]) {
                             g_actual_push_order[g_stop_order_counter - 1] = reel_to_stop;
                             g_stop_order_counter++;
                         }
-                    } else {
-                         printf("リール停止入力ブロック中 (MainState: %d)\n", g_main_state);
-                    }
+                    } 
                 }
             }
         }
 
-        // --- 4. 更新処理 ---
         Reel_Update();
         Presentation_Update(); 
 
-        // (★) T10 修正: AT_Update に渡すためのフラグを毎フレームリセット
         bool all_reels_stopped_this_frame = false;
         int diff_this_frame = 0;
         bool oshijun_success_this_frame = false;
 
-        // (★) メインループの状態遷移
         switch (g_main_state) {
             
             case STATE_WAIT_LEVER:
@@ -486,26 +422,23 @@ int SDL_main(int argc, char* args[]) {
                     Presentation_Play(gRenderer, loop_path, true);
                     
                     g_main_state = STATE_REELS_SPINNING;
-                    printf("リール停止ブロックを解除。\n");
                 }
                 break;
             
             case STATE_REELS_SPINNING:
                 if (!Reel_IsSpinning()) {
-                    // (★) T10 修正: 停止フラグと差枚計算をここで行う
                     all_reels_stopped_this_frame = true; 
                     oshijun_success_this_frame = CheckOshijun(g_current_yaku, g_actual_push_order);
                     int payout = GetPayoutForYaku(g_current_yaku, oshijun_success_this_frame);
                     diff_this_frame = payout - BET_COUNT; 
                     g_game_data.total_payout_diff += diff_this_frame;
                     
-                    // (★) AT高確率状態の1回目停止か？ (T9のロジック)
+                    // AT高確 1回目リール停止
                     if (g_current_logic_state == STATE_BONUS_HIGH_PROB && 
                         g_game_data.at_step == AT_STEP_REEL_SPIN)
                     {
                         printf("AT高確: 1回目リール停止\n");
                         
-                        // (★) T10 修正: 押し順ミス表示のためだけに OnReelsStopped を呼ぶ
                         OnReelsStopped(oshijun_success_this_frame); 
                         
                         if (g_game_data.at_bonus_result == BONUS_NONE) {
@@ -532,8 +465,6 @@ int SDL_main(int argc, char* args[]) {
                     }
                     else 
                     {
-                        // (★) 通常の全リール停止
-                        // (★) T10 修正: OnReelsStopped に 押し順結果を渡す
                         OnReelsStopped(oshijun_success_this_frame); 
                         g_main_state = STATE_WAIT_LEVER; 
                     }
@@ -557,7 +488,8 @@ int SDL_main(int argc, char* args[]) {
             {
                 Uint32 elapsed = SDL_GetTicks() - g_game_data.at_judge_video_start_time;
 
-                if (g_game_data.at_bonus_result == BONUS_DARLING || g_game_data.at_bonus_result == BONUS_FRANXX) {
+                // 逆回転・強制停止の対象か？
+                if (g_game_data.at_bonus_result != BONUS_AT_CONTINUE && g_game_data.at_bonus_result != BONUS_NONE) {
                     
                     const Uint32 REVERSE_START_TIME = g_game_data.at_judge_video_duration_ms - 3000;
                     const Uint32 STOP_TIME = g_game_data.at_judge_video_duration_ms - 2000;
@@ -567,10 +499,13 @@ int SDL_main(int argc, char* args[]) {
                         g_game_data.at_judge_timing_reverse_triggered = true;
                     }
                     if (!g_game_data.at_judge_timing_stop_triggered && elapsed >= STOP_TIME) {
-                        if (g_game_data.at_bonus_result == BONUS_DARLING) {
-                            Reel_ForceStop(REEL_PATTERN_RED7_MID);
-                        } else { // BONUS_FRANXX
+                        
+                        // (★修正) 当選内容に応じた停止形
+                        if (g_game_data.at_bonus_result == BONUS_FRANXX) {
                             Reel_ForceStop(REEL_PATTERN_FRANXX_BONUS);
+                        } else {
+                            // DARLING, BB_EX, EPISODE は全て赤7揃い
+                            Reel_ForceStop(REEL_PATTERN_RED7_MID);
                         }
                         g_game_data.at_judge_timing_stop_triggered = true;
                     }
@@ -579,26 +514,48 @@ int SDL_main(int argc, char* args[]) {
                 if (Presentation_IsFinished()) {
                     printf("AT高確: 当落演出 終了\n");
                     
-                    if (g_game_data.at_bonus_result == BONUS_AT_CONTINUE) {
-                        g_game_data.at_step = AT_STEP_WAIT_LEVER1;
-                        g_main_state = STATE_WAIT_LEVER;
-                        if (g_game_data.bonus_high_prob_games <= 0) {
-                             g_current_logic_state = STATE_AT_END;
-                             g_game_data.current_state = STATE_AT_END; 
-                        }
-                    } else if (g_game_data.at_bonus_result == BONUS_DARLING) {
-                        g_current_logic_state = STATE_BB_HIGH_PROB; 
-                        g_game_data.current_state = STATE_BB_HIGH_PROB; 
-                        g_main_state = STATE_WAIT_LEVER;
-                    } else { // BONUS_FRANXX
-                        g_current_logic_state = STATE_FRANXX_BONUS;
-                        g_game_data.current_state = STATE_FRANXX_BONUS; 
-                        g_main_state = STATE_WAIT_LEVER;
+                    // (★修正) 演出終了後の状態遷移 (EX/EPを追加)
+                    switch (g_game_data.at_bonus_result) {
+                        case BONUS_AT_CONTINUE:
+                            g_game_data.at_step = AT_STEP_WAIT_LEVER1;
+                            g_main_state = STATE_WAIT_LEVER;
+                            if (g_game_data.bonus_high_prob_games <= 0) {
+                                 g_current_logic_state = STATE_AT_END;
+                                 g_game_data.current_state = STATE_AT_END; 
+                            }
+                            break;
+                            
+                        case BONUS_DARLING:
+                            g_current_logic_state = STATE_BB_HIGH_PROB; 
+                            g_game_data.current_state = STATE_BB_HIGH_PROB; 
+                            g_main_state = STATE_WAIT_LEVER;
+                            break;
+                            
+                        case BONUS_FRANXX:
+                            g_current_logic_state = STATE_FRANXX_BONUS;
+                            g_game_data.current_state = STATE_FRANXX_BONUS; 
+                            g_main_state = STATE_WAIT_LEVER;
+                            break;
+
+                        case BONUS_BB_EX: // (★追加)
+                            g_current_logic_state = STATE_BB_EX;
+                            g_game_data.current_state = STATE_BB_EX;
+                            if(g_game_data.queued_bb_ex_payout <= 0) g_game_data.queued_bb_ex_payout = 100;
+                            g_main_state = STATE_WAIT_LEVER;
+                            break;
+
+                        case BONUS_EPISODE: // (★追加)
+                            g_current_logic_state = STATE_EPISODE_BONUS;
+                            g_game_data.current_state = STATE_EPISODE_BONUS;
+                            g_main_state = STATE_WAIT_LEVER;
+                            break;
+                            
+                        default:
+                            g_main_state = STATE_WAIT_LEVER;
+                            break;
                     }
                     
-                    if (g_game_data.at_bonus_result != BONUS_AT_CONTINUE) {
-                        // (遷移演出が再生される)
-                    } else {
+                    if (g_game_data.at_bonus_result == BONUS_AT_CONTINUE) {
                          const char* loop_path = MediaConfig_GetPath(GetLoopKeyForState(STATE_BONUS_HIGH_PROB));
                          Presentation_Play(gRenderer, loop_path, true);
                     }
@@ -607,29 +564,20 @@ int SDL_main(int argc, char* args[]) {
             }
         }
 
-
-        // (★) T10 修正: ATロジックの更新 (at.h の仕様変更)
-        // (★) AT状態 (BB_INITIAL ～ AT_END の手前) の場合のみ呼び出す
         if (g_current_logic_state >= STATE_BB_INITIAL &&
             g_current_logic_state < STATE_AT_END)
         {
-            // (★) AT_Update を呼び出し (AT_ProcessStop の代わり)
-            // (★) AT中のG数消化、差枚管理、状態遷移はすべて AT_Update が担当する
             AT_Update(&g_game_data, g_current_yaku, diff_this_frame, lever_on_this_frame, all_reels_stopped_this_frame);
-            
-            // (★) AT_Update によって状態が変更された可能性があるので、ロジック状態を再同期
             g_current_logic_state = g_game_data.current_state;
         }
 
 
-        // --- 5. 描画処理 ---
         SDL_SetRenderDrawColor(gRenderer, 0x1E, 0x1E, 0x1E, 0xFF);
         SDL_RenderClear(gRenderer);
 
         Presentation_Draw(gRenderer, SCREEN_WIDTH, SCREEN_HEIGHT); 
         Reel_Draw(gRenderer, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-        // (★) T10 修正: AT_Draw() を呼び出す
         if (g_current_logic_state >= STATE_BB_INITIAL &&
             g_current_logic_state < STATE_AT_END)
         {
@@ -691,10 +639,9 @@ int SDL_main(int argc, char* args[]) {
         }
 
         SDL_RenderPresent(gRenderer);
-        SDL_Delay(16); // 60FPS
+        SDL_Delay(16); 
     }
 
-    // --- 6. 終了処理 ---
     Presentation_Cleanup(); 
     Reel_Cleanup();
     MediaConfig_Cleanup(); 

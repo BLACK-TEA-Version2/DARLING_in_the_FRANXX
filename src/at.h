@@ -46,6 +46,12 @@ void AT_Update(GameData* data, YakuType yaku, int diff, bool lever_on, bool all_
  */
 void AT_Draw(SDL_Renderer* renderer, int screen_width, int screen_height);
 
+/**
+ * @brief (★ T19 修正) AT状態を強制的に遷移させ、状態に応じた初期化を行います。
+ * (main.c から呼び出すために static を解除)
+ */
+void transition_to_state(GameData* data, AT_State new_state);
+
 
 /**
  * @brief AT状態の名称を取得

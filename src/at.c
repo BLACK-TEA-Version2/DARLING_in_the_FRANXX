@@ -178,7 +178,7 @@ static void perform_payout_addon(GameData* data, YakuType yaku) {
 }
 
 // (★) --- ここが T13 の修正箇所 ---
-static void transition_to_state(GameData* data, AT_State new_state) {
+void transition_to_state(GameData* data, AT_State new_state) {
     
     data->current_state = new_state; 
     data->current_bonus_payout = 0; 

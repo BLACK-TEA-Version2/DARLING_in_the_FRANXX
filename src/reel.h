@@ -85,5 +85,6 @@ int Reel_GetPaylineIndex(int reel_index);
  */
 void Reel_GetStoppedSymbolIndices(int reel_index, int* out_idx_ue, int* out_idx_naka, int* out_idx_shita);
 
+int Reel_GetSymbolIndex(int reel_index, SymbolType symbol);
 
 #endif // REEL_H

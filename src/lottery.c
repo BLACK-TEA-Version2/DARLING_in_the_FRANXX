@@ -11,14 +11,12 @@ static inline unsigned rand_u16(void) {
 
 // (★追加) 0〜999 (1000未満) の乱数を生成
 static inline int rand_1000(void) {
-    // (at.c の既存のロジックに合わせる)
     return rand() % 1000;
 }
 
 // --- 役情報 (払い出し) ---
 int GetPayoutForYaku(YakuType yaku, bool oshijun_success) {
     switch (yaku) {
-        // 押し順ベル (★) oshijun_success が false なら 0 を返す
         case YAKU_OSHIJUN_BELL_LMR:
         case YAKU_OSHIJUN_BELL_LRM:
         case YAKU_OSHIJUN_BELL_MLR:
@@ -27,7 +25,6 @@ int GetPayoutForYaku(YakuType yaku, bool oshijun_success) {
         case YAKU_OSHIJUN_BELL_RML:
             return oshijun_success ? 10 : 0; 
 
-        // 小役
         case YAKU_REPLAY:         return 3;
         case YAKU_COMMON_BELL:    return 1;
         case YAKU_CHERRY:         return 3;
@@ -35,15 +32,11 @@ int GetPayoutForYaku(YakuType yaku, bool oshijun_success) {
         case YAKU_FRANXX_ME:      return 3;
         case YAKU_STRELITZIA_ME:  return 3;
         
-        // CZ専用役
         case YAKU_HP_REVERSE_FRANXX:      return 3;
         case YAKU_HP_REVERSE_STRONG_FRANXX: return 3;
         case YAKU_HP_REVERSE_STRELITZIA:  return 3;
         
-        // AT中 (仮)
         case YAKU_FRANXX_SYMBOL:  return 15;
-
-        // (★) 演出役は削除
 
         case YAKU_HAZURE:
         default:
@@ -71,9 +64,6 @@ const char* GetYakuName(YakuType yaku) {
         case YAKU_HP_REVERSE_STRELITZIA:  return "【高確】逆押しストレリチア目";
         case YAKU_HAZURE:           return "ハズレ";
         case YAKU_FRANXX_SYMBOL:  return "フランクス図柄(AT)";
-        
-        // (★) 演出役は削除
-
         default:                    return "不明";
     }
 }
@@ -94,33 +84,18 @@ bool IsRareYaku(YakuType yaku) {
     }
 }
 
-/**
- * @brief (★新規) 押し順が成立役と合っているか判定します。
- */
+// --- 押し順判定 ---
 bool CheckOshijun(YakuType yaku, int push_order[3]) {
     switch (yaku) {
-        // (L=0, C=1, R=2)
-        case YAKU_OSHIJUN_BELL_LMR: // 0 -> 1 -> 2
-            return (push_order[0] == 0 && push_order[1] == 1 && push_order[2] == 2);
-        case YAKU_OSHIJUN_BELL_LRM: // 0 -> 2 -> 1
-            return (push_order[0] == 0 && push_order[1] == 2 && push_order[2] == 1);
-        case YAKU_OSHIJUN_BELL_MLR: // 1 -> 0 -> 2
-            return (push_order[0] == 1 && push_order[1] == 0 && push_order[2] == 2);
-        case YAKU_OSHIJUN_BELL_MRL: // 1 -> 2 -> 0
-            return (push_order[0] == 1 && push_order[1] == 2 && push_order[2] == 0);
-        case YAKU_OSHIJUN_BELL_RLM: // 2 -> 0 -> 1
-            return (push_order[0] == 2 && push_order[1] == 0 && push_order[2] == 1);
-        case YAKU_OSHIJUN_BELL_RML: // 2 -> 1 -> 0
-            return (push_order[0] == 2 && push_order[1] == 1 && push_order[2] == 0);
-        
-        // (★) 演出役は削除
-
-        default:
-            // 押し順ベル以外の役は、常に「正解」扱い
-            return true; 
+        case YAKU_OSHIJUN_BELL_LMR: return (push_order[0] == 0 && push_order[1] == 1 && push_order[2] == 2);
+        case YAKU_OSHIJUN_BELL_LRM: return (push_order[0] == 0 && push_order[1] == 2 && push_order[2] == 1);
+        case YAKU_OSHIJUN_BELL_MLR: return (push_order[0] == 1 && push_order[1] == 0 && push_order[2] == 2);
+        case YAKU_OSHIJUN_BELL_MRL: return (push_order[0] == 1 && push_order[1] == 2 && push_order[2] == 0);
+        case YAKU_OSHIJUN_BELL_RLM: return (push_order[0] == 2 && push_order[1] == 0 && push_order[2] == 1);
+        case YAKU_OSHIJUN_BELL_RML: return (push_order[0] == 2 && push_order[1] == 1 && push_order[2] == 0);
+        default: return true; 
     }
 }
-
 
 // --- 公開抽選関数 (通常時) ---
 YakuType Lottery_GetResult_Normal() {
@@ -196,88 +171,90 @@ YakuType Lottery_GetResult_FranxxHighProb() {
 
 
 // =================================================================
-// (★新規) AT高確率状態用
+// (★) AT高確率状態用 抽選
 // =================================================================
 
 /**
- * @brief (★新規) 【AT高確率状態】の確率テーブルに基づいて小役を抽選します。
- * (注: 現状、適切なAT中テーブルがないため、通常時テーブルを流用します)
+ * @brief 【AT高確率状態】の小役抽選
+ * 通常時のテーブル(Normal)をそのまま使用します。
  */
 YakuType Lottery_GetResult_AT(void) {
-    // TODO: AT専用の抽選テーブルを実装する
-    //
-    // 仕様 4: 「完全なハズレ（ボーナス当否の抽選を一切行わない子役）」
-    // を実装するため、ここではダミーとして 50% で YAKU_HAZURE (抽選対象外) を返す
-    if (rand_1000() < 500) {
-        return YAKU_HAZURE;
-    }
-    
-    // 残り 50% で通常時の抽選を行う (YAKU_HAZURE 以外)
-    YakuType yaku;
-    do {
-        yaku = Lottery_GetResult_Normal();
-    } while (yaku == YAKU_HAZURE);
-    
-    return yaku;
+    return Lottery_GetResult_Normal();
 }
 
 /**
- * @brief (★新規) AT高確率状態でのボーナス当否判定 (at.c からロジック移植)
+ * @brief 【AT高確率状態】のボーナス当否・種別抽選 (完全実装版)
  */
 AT_BonusResultType Lottery_CheckBonus_AT(YakuType yaku) {
-    // (at.c の roll_high_prob_success 相当)
+    // 1. 当否判定 (当選率)
     int r_success = rand_1000();
     bool is_success = false;
+
     switch (yaku) {
         case YAKU_REPLAY:       is_success = (r_success < 318); break; // 31.8%
         case YAKU_COMMON_BELL:  is_success = (r_success < 379); break; // 37.9%
+        case YAKU_HAZURE:       is_success = false; break;
         default:
-            if (IsRareYaku(yaku)) is_success = true; // レア役は 100% 当選
+            // レア役・確定役は 100% 当選
+            if (IsRareYaku(yaku)) is_success = true;
             break;
     }
 
-    // 仕様 4: 「抽選対象役」かどうか
-    // = 当否抽選の対象になったか？
     if (!is_success) {
-        // (YAKU_HAZURE や、抽選に漏れたリプ/ベル)
-        
-        // (★) 抽選対象役 (リプ/ベル) だったが抽選に漏れた場合
+        // 抽選対象役 (リプ/ベル) なら演出用継続、それ以外はハズレ
         if (yaku == YAKU_REPLAY || yaku == YAKU_COMMON_BELL) {
-            return BONUS_AT_CONTINUE; // 演出対象
+            return BONUS_AT_CONTINUE;
         }
-        
-        // (★) そもそも抽選対象外 (ハズレ、押し順ベルなど)
         return BONUS_NONE;
     }
 
-    // --- 当選確定 ---
-    // (at.c の perform_bonus_allocation 相当の種別振り分け)
+    // 2. 種別振り分け (0.1%単位、0-999)
     int r_type = rand_1000(); 
-    
+
+    /*
+     * FB: フランクスボーナス
+     * DB: ダーリンボーナス
+     * EX: BB EX
+     * EP: エピソードボーナス
+     */
+
     switch (yaku) {
         case YAKU_REPLAY: 
         case YAKU_COMMON_BELL: 
-            if (r_type < 370) return BONUS_FRANXX; 
-            else return BONUS_DARLING; // (BB_EXはダーリンボーナスとして扱う)
+            // FB 37%, DB 50%, EX 13%, EP 0%
+            if (r_type < 370) return BONUS_FRANXX;      // 0-369
+            if (r_type < 870) return BONUS_DARLING;     // 370-869 (370+500)
+            return BONUS_BB_EX;                         // 870-999 (残り130)
         
         case YAKU_CHANCE_ME: 
-            return BONUS_DARLING; // (EPボーナス/BB_EXはダーリンボーナスとして扱う)
+            // FB 0%, DB 80%, EX 19%, EP 1%
+            if (r_type < 800) return BONUS_DARLING;     // 0-799
+            if (r_type < 990) return BONUS_BB_EX;       // 800-989 (800+190)
+            return BONUS_EPISODE;                       // 990-999 (残り10)
         
         case YAKU_CHERRY: 
-            if (r_type < 500) return BONUS_FRANXX; 
-            else return BONUS_DARLING; // (BB_EXはダーリンボーナスとして扱う)
+            // FB 50%, DB 40%, EX 9%, EP 1%
+            if (r_type < 500) return BONUS_FRANXX;      // 0-499
+            if (r_type < 900) return BONUS_DARLING;     // 500-899 (500+400)
+            if (r_type < 990) return BONUS_BB_EX;       // 900-989 (900+90)
+            return BONUS_EPISODE;                       // 990-999 (残り10)
         
         case YAKU_FRANXX_ME: 
-            if (r_type < 751) return BONUS_DARLING; // (EP/BB_EXはダーリンボーナスとして扱う)
-            else return BONUS_FRANXX; 
-        
+            // FB 25%, DB 37.5%, EX 36.5%, EP 1%
+            // (37.5% -> 375, 36.5% -> 365)
+            if (r_type < 250) return BONUS_FRANXX;      // 0-249
+            if (r_type < 625) return BONUS_DARLING;     // 250-624 (250+375)
+            if (r_type < 990) return BONUS_BB_EX;       // 625-989 (625+365)
+            return BONUS_EPISODE;                       // 990-999 (残り10)
+
         case YAKU_STRELITZIA_ME: 
-        case YAKU_HP_REVERSE_STRONG_FRANXX: // (AT中には来ないが念のため)
-        case YAKU_HP_REVERSE_STRELITZIA:    // (AT中には来ないが念のため)
-            return BONUS_DARLING; // (EP/BB_EXはダーリンボーナスとして扱う)
-        
+        case YAKU_HP_REVERSE_STRONG_FRANXX:
+        case YAKU_HP_REVERSE_STRELITZIA:
+            // FB 0%, DB 0%, EX 95%, EP 5%
+            if (r_type < 950) return BONUS_BB_EX;       // 0-949
+            return BONUS_EPISODE;                       // 950-999
+
         default:
-            // (抽選対象役だが、振り分けにない = 落選)
             return BONUS_AT_CONTINUE; 
     }
 }

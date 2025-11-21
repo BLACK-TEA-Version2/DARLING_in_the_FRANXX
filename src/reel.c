@@ -13,25 +13,16 @@
 
 // ===================== 内部状態 =====================
 static SDL_Texture* gSymbolTextures[SYMBOL_COUNT];
-static SDL_Texture* gReelBackgroundTexture = NULL; // (★) リール背景用テクスチャ
+static SDL_Texture* gReelBackgroundTexture = NULL; 
 static float gReelPos[3]        = {0.0f, 0.0f, 0.0f};
 static bool  gIsSpinning[3]     = {false, false, false};
 static bool  gIsStopping[3]     = {false, false, false};
-static bool  gIsSpinningBackward[3] = {false, false, false}; // (★追加) 逆回転フラグ
+static bool  gIsSpinningBackward[3] = {false, false, false}; 
 static int   gTargetStopGridM[3]= {0, 0, 0};
 static float gTargetPos[3]      = {0.0f, 0.0f, 0.0f};
 static YakuType gCurrentYaku = YAKU_HAZURE;
 static int      gStopOrder[3] = {0, 0, 0};
 static int gStoppedGridM[3] = {-1, -1, -1};
-
-// (★追加) 強制停止パターンの定義 (グリッドインデックス)
-// (注: グリッドインデックス m は「枠上」の図柄インデックスを指す)
-// 中段 AKA_7 (インデックス 6) にするには、グリッド 5 (5+1=6) を指定
-static const int PATTERN_RED7_MID_GRID[3] = { 5, 5, 5 }; 
-// 左: AKA_7(6) -> グリッド 5
-// 中: AKA_7(6) -> グリッド 5
-// 右: UE(7)/NAKA(8) -> 枠上UE(7) -> グリッド 7
-static const int PATTERN_FRANXX_BONUS_GRID[3] = { 5, 5, 7 };
 
 // ===================== リール配列 =====================
 SymbolType left_reel[SYMBOLS_PER_REEL] = {
@@ -101,12 +92,24 @@ static bool GetStoppedSymbols(int reel_index, SymbolType* out_ue, SymbolType* ou
     return true;
 }
 
-// ===================== リール制御の心臓部 =====================
+// (★追加) 指定された図柄のリール上の位置(インデックス)を返す
+int Reel_GetSymbolIndex(int reel_index, SymbolType symbol) {
+    if (reel_index < 0 || reel_index > 2) return -1;
+    for (int i = 0; i < SYMBOLS_PER_REEL; i++) {
+        if (all_reels[reel_index][i] == symbol) {
+            return i;
+        }
+    }
+    return -1; // 見つからない
+}
+
+// ===================== リール制御 =====================
 static bool CheckForKoyakuCompletion(int reel_index, int target_grid_m,
                                      bool rL_stopped, SymbolType rL_ue, SymbolType rL_naka, SymbolType rL_shita,
                                      bool rC_stopped, SymbolType rC_ue, SymbolType rC_naka, SymbolType rC_shita,
                                      bool rR_stopped, SymbolType rR_ue, SymbolType rR_naka, SymbolType rR_shita)
 {
+    // (省略: 変更なし)
     int ue_idx, naka_idx, shita_idx;
     GetSymbolIndices(target_grid_m, &ue_idx, &naka_idx, &shita_idx);
     SymbolType ue   = GetSymbol(reel_index, ue_idx);
@@ -138,7 +141,7 @@ static inline bool CheckBellPullIn(SymbolType naka_sym) {
 }
 
 static bool CheckYakuMatch(int reel_index, int stop_order, int target_grid_m) {
-
+    // (省略: 変更なし)
     int ue_idx, naka_idx, shita_idx;
     GetSymbolIndices(target_grid_m, &ue_idx, &naka_idx, &shita_idx);
     SymbolType ue   = GetSymbol(reel_index, ue_idx);
@@ -151,7 +154,6 @@ static bool CheckYakuMatch(int reel_index, int stop_order, int target_grid_m) {
     bool rR_stopped = GetStoppedSymbols(2, &rR_ue, &rR_naka, &rR_shita);
 
     switch (gCurrentYaku) {
-        // (★) YAKU_FAKE_AKA_7 削除
         case YAKU_HP_REVERSE_FRANXX:
         case YAKU_HP_REVERSE_STRONG_FRANXX:
         case YAKU_HP_REVERSE_STRELITZIA:
@@ -305,14 +307,12 @@ static bool CheckYakuMatch(int reel_index, int stop_order, int target_grid_m) {
 
 bool Reel_Init(SDL_Renderer* renderer) {
     char filename[256];
-    // 図柄テクスチャの読み込み
     for (int i = 0; i < SYMBOL_COUNT; i++) {
         sprintf(filename, "../images/zugara_%d.png", i + 1);
         gSymbolTextures[i] = IMG_LoadTexture(renderer, filename);
         if (gSymbolTextures[i] == NULL) {
             fprintf(stderr, "Failed to load texture: %s, Error: %s\n", filename, IMG_GetError());
-            // (★) 読み込み失敗時の後処理を追加
-            for(int j = 0; j < i; j++) { // 既に読み込んだテクスチャを解放
+            for(int j = 0; j < i; j++) { 
                  SDL_DestroyTexture(gSymbolTextures[j]);
                  gSymbolTextures[j] = NULL;
             }
@@ -320,12 +320,10 @@ bool Reel_Init(SDL_Renderer* renderer) {
         }
     }
 
-    // (★) 背景画像の読み込み
     sprintf(filename, "../images/reel_background.png");
     gReelBackgroundTexture = IMG_LoadTexture(renderer, filename);
     if (gReelBackgroundTexture == NULL) {
         fprintf(stderr, "Failed to load background texture: %s, Error: %s\n", filename, IMG_GetError());
-        // (★) 読み込み失敗時の後処理を追加 (図柄テクスチャも解放)
         for(int i = 0; i < SYMBOL_COUNT; i++) {
              if (gSymbolTextures[i]) {
                  SDL_DestroyTexture(gSymbolTextures[i]);
@@ -334,7 +332,6 @@ bool Reel_Init(SDL_Renderer* renderer) {
         }
         return false;
     }
-
     return true;
 }
 
@@ -343,66 +340,74 @@ void Reel_SetYaku(YakuType yaku) {
 }
 
 void Reel_StartSpinning() {
-    // gIsSpinningBackward = false; // (★) 削除
     for (int i = 0; i < 3; i++) {
         gIsSpinning[i] = true;
         gIsStopping[i] = false;
-        gIsSpinningBackward[i] = false; // (★追加)
+        gIsSpinningBackward[i] = false; 
         gStoppedGridM[i] = -1;
         gStopOrder[i] = 0;
     }
 }
 
-// (★新規) 逆回転開始
 void Reel_StartSpinning_Reverse(void) {
     for (int i = 0; i < 3; i++) {
         gIsSpinning[i] = false;
         gIsStopping[i] = false;
-        gIsSpinningBackward[i] = true; // (★追加)
+        gIsSpinningBackward[i] = true; 
         gStoppedGridM[i] = -1;
         gStopOrder[i] = 0;
     }
 }
 
-// (★新規) 強制停止
+// (★修正) 強制停止関数 (マジックナンバー排除版)
 void Reel_ForceStop(ReelForceStopPattern pattern) {
-    const int* target_grid_m = NULL;
+    const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
+
+    // 各リールの中段(ペイライン)に止めたい図柄
+    SymbolType target_symbols[3] = { SYMBOL_NONE, SYMBOL_NONE, SYMBOL_NONE };
 
     if (pattern == REEL_PATTERN_RED7_MID) {
-        target_grid_m = PATTERN_RED7_MID_GRID;
+        // 全リール中段 赤7
+        target_symbols[0] = AKA_7;
+        target_symbols[1] = AKA_7;
+        target_symbols[2] = AKA_7;
     } else if (pattern == REEL_PATTERN_FRANXX_BONUS) {
-        target_grid_m = PATTERN_FRANXX_BONUS_GRID;
+        // 左・中: 赤7, 右: SHITA (★修正済み)
+        target_symbols[0] = AKA_7;
+        target_symbols[1] = AKA_7;
+        target_symbols[2] = SHITA;
     } else {
-        return; // 不明なパターン
+        return;
     }
-    
-    const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
 
     for (int i = 0; i < 3; i++) {
         gIsSpinning[i] = false;
         gIsStopping[i] = false;
-        gIsSpinningBackward[i] = false; // (★追加)
+        gIsSpinningBackward[i] = false;
 
-        int grid_m = target_grid_m[i];
+        int target_idx = Reel_GetSymbolIndex(i, target_symbols[i]);
+        if (target_idx == -1) {
+            // エラー: 図柄が見つからない場合はデフォルト位置(1)へ
+            target_idx = 1; 
+        }
+
+        // grid_m は「枠上」のインデックス。
+        // 中段(ペイライン)が target_idx なら、枠上は target_idx - 1
+        int grid_m = (target_idx - 1 + SYMBOLS_PER_REEL) % SYMBOLS_PER_REEL;
+
         gStoppedGridM[i] = grid_m;
-        gTargetStopGridM[i] = grid_m; // (念のため)
+        gTargetStopGridM[i] = grid_m;
         
-        // グリッドインデックスからY座標を計算
         gReelPos[i] = Wrap((float)(grid_m * SYMBOL_HEIGHT), REEL_LENGTH);
         gTargetPos[i] = gReelPos[i];
     }
 }
 
-
-// (★) Reel_StartSpinning_Enshutsu_Backward 関数を削除
-
 void Reel_RequestStop(int reel_index, int stop_order) {
     if (reel_index < 0 || reel_index > 2) return;
     
-    // (★修正) 順回転中、または逆回転中のみ停止を受け付ける
     if (!gIsSpinning[reel_index] && !gIsSpinningBackward[reel_index]) return;
 
-    // (★追加) 逆回転中だった場合は、ここで止める
     gIsSpinningBackward[reel_index] = false;
 
     const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
@@ -443,9 +448,8 @@ void Reel_RequestStop(int reel_index, int stop_order) {
 
 void Reel_Update() {
     const float REEL_LENGTH = (float)(SYMBOLS_PER_REEL * SYMBOL_HEIGHT);
-    // (★) 順回転 (-REEL_SPEED)
     const float speed_forward = -REEL_SPEED;
-    const float speed_backward = REEL_SPEED; // (★追加) 逆回転（プラス方向）
+    const float speed_backward = REEL_SPEED; 
 
     for (int i = 0; i < 3; i++) {
         if (gIsSpinning[i]) {
@@ -454,16 +458,13 @@ void Reel_Update() {
 
         } 
         else if (gIsSpinningBackward[i]) {
-             // (★追加) 逆回転
             gReelPos[i] += speed_backward; 
             gReelPos[i]  = Wrap(gReelPos[i], REEL_LENGTH);
         }
         else if (gIsStopping[i]) {
-            // (★) 順回転の残り距離計算のみ
             float remaining = gReelPos[i] - gTargetPos[i];
             if (remaining < 0.0f) remaining += REEL_LENGTH;
 
-            // (★) 速度の絶対値で比較
             if (remaining <= fabsf(speed_forward) + EPS) {
                 gReelPos[i]  = gTargetPos[i];
                 gIsStopping[i] = false;
@@ -478,93 +479,71 @@ void Reel_Update() {
 
 void Reel_Draw(SDL_Renderer* renderer, int screen_width, int screen_height) {
     const int total_reels_width = (REEL_WIDTH * 3) + (REEL_SPACING * 2);
-    // (★) X座標の中心を3ピクセル左にずらす
-    const int start_x_base = ((screen_width - total_reels_width) / 2) - 3; // (★) ずらす前の中心X
-
-    // (★) リール窓の上端 Y 座標を、 `355` に固定
+    const int start_x_base = ((screen_width - total_reels_width) / 2) - 3; 
     const int start_y = 355; 
 
-    // (★) 背景画像の描画領域を計算 (枠線を描画する領域に合わせる)
     SDL_Rect backgroundRect = {
-        start_x_base - 5, // (★) 左に5pxずらす
-        start_y - 2,      // (★) 上に2pxずらす
-        total_reels_width + 8, // (★) 幅を8px広げる
-        (SYMBOL_HEIGHT * 3) + 4 // (★) 高さを4px広げる
+        start_x_base - 5, 
+        start_y - 2,      
+        total_reels_width + 8, 
+        (SYMBOL_HEIGHT * 3) + 4 
     };
 
-    // (★) 1. 背景画像を描画
     if (gReelBackgroundTexture) {
          SDL_RenderCopy(renderer, gReelBackgroundTexture, NULL, &backgroundRect);
     } else {
-         // (フォールバック: もし画像読み込み失敗なら白で塗る)
          SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
          SDL_RenderFillRect(renderer, &backgroundRect);
     }
 
-
-    // --- (★) ここから図柄描画 ---
-    // (★) クリップ領域を計算 (背景画像の描画領域と同じ)
-    SDL_Rect clip_rect = backgroundRect; // (★) 背景描画領域をクリップ領域とする
+    SDL_Rect clip_rect = backgroundRect; 
 
     for (int r = 0; r < 3; r++) {
         int base_index = (int)floorf(gReelPos[r] / SYMBOL_HEIGHT);
         float y_offset = fmodf(gReelPos[r], (float)SYMBOL_HEIGHT);
         if (y_offset < 0.0f) y_offset += SYMBOL_HEIGHT;
 
-        // (★) リールごとのX座標オフセットを追加
         int x_offset = 0;
-        if (r == 0) {      // 左リール
-            x_offset = 10;  // 右に2pxずらす
-        } else if (r == 2) { // 右リール
-            x_offset = -10; // 左に2pxずらす
+        if (r == 0) {      
+            x_offset = 10;  
+        } else if (r == 2) { 
+            x_offset = -10; 
         }
-        // 中央(r=1)は x_offset = 0
 
-        int current_start_x = start_x_base + r * (REEL_WIDTH + REEL_SPACING) + x_offset; // (★) 各リールの開始X座標
+        int current_start_x = start_x_base + r * (REEL_WIDTH + REEL_SPACING) + x_offset; 
 
-        // (★) 3コマ (+α) のみ描画
-        for (int i = 0; i < 4; i++) { // 0:上, 1:中, 2:下, 3:下の下(一部)
+        for (int i = 0; i < 4; i++) { 
             int current_index = (base_index + i + SYMBOLS_PER_REEL) % SYMBOLS_PER_REEL;
             SymbolType symbol_to_draw = all_reels[r][current_index];
 
             SDL_Rect destRect = {
-                current_start_x, // (★) オフセット適用後のX座標を使う
+                current_start_x, 
                 (int)(start_y + (i * SYMBOL_HEIGHT) - y_offset),
                 REEL_WIDTH,
                 SYMBOL_HEIGHT
             };
 
-            // (★) クリップ領域を設定
             SDL_RenderSetClipRect(renderer, &clip_rect);
-
             SDL_RenderCopy(renderer, gSymbolTextures[symbol_to_draw], NULL, &destRect);
-
-            SDL_RenderSetClipRect(renderer, NULL); // クリップ解除
+            SDL_RenderSetClipRect(renderer, NULL); 
         }
     }
-    // --- (★) 図柄描画ここまで ---
-
-    // (★) 枠線の描画は削除済み
-
 }
 
 bool Reel_IsSpinning() {
     for (int i = 0; i < 3; i++) {
-        // (★修正) 逆回転中も「回転中」とみなす
         if (gIsSpinning[i] || gIsStopping[i] || gIsSpinningBackward[i]) return true;
     }
     return false;
 }
 
 void Reel_Cleanup() {
-    // 図柄テクスチャの解放
     for (int i = 0; i < SYMBOL_COUNT; i++) {
         if (gSymbolTextures[i]) {
             SDL_DestroyTexture(gSymbolTextures[i]);
             gSymbolTextures[i] = NULL;
         }
     }
-    // (★) 背景テクスチャの解放
     if (gReelBackgroundTexture) {
         SDL_DestroyTexture(gReelBackgroundTexture);
         gReelBackgroundTexture = NULL;
