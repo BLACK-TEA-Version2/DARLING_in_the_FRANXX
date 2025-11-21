@@ -157,8 +157,8 @@ void Director_Update() {
             
             // 当選時は逆回転制御 (動画終了の5秒前)
             if (g_game_data.at_bonus_result != BONUS_AT_CONTINUE && g_game_data.at_bonus_result != BONUS_NONE) {
-                const Uint32 REV_TIME = (g_game_data.at_judge_video_duration_ms > 5000) 
-                                        ? (g_game_data.at_judge_video_duration_ms - 5000) : 0;
+                const Uint32 REV_TIME = (g_game_data.at_judge_video_duration_ms > 2500) 
+                                        ? (g_game_data.at_judge_video_duration_ms - 2500) : 0;
 
                 if (!g_game_data.at_judge_timing_reverse_triggered && elapsed >= REV_TIME) {
                     Reel_StartSpinning_Reverse();
