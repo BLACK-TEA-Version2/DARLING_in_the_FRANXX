@@ -1,10 +1,3 @@
-// at.c (★ T13 修正版)
-//
-// 修正点:
-// 1. (T13) transition_to_state 内のタイプミスを修正
-//    (PAYOUT_TARGET_EPISODE_BONUS -> PAYOUT_TARGET_EP_BONUS)
-// 2. (T12) handle_payout_bonus のG数加算ロジック (10Gベース加算) は維持
-
 #include "at.h"
 #include "lottery.h"
 #include <stdio.h>
@@ -12,8 +5,7 @@
 #include <string.h>
 
 // --- 内部ヘルパー関数 ---
-// (★) get_st_games_from_level から handle_hiyoku_beats までのヘルパー関数
-// (★) (T6/T12 と同一のため、ここでは省略)
+
 static int get_st_games_from_level(HiyokuLevel level) {
     switch (level) {
         case HIYOKU_LV1: return 2;
@@ -22,6 +14,7 @@ static int get_st_games_from_level(HiyokuLevel level) {
     }
     return 2;
 }
+
 static void Hiyoku_Init(GameData* data, bool is_from_ep_bonus) {
     data->hiyoku_is_active = true;
     data->hiyoku_is_frozen = false; 
@@ -40,13 +33,15 @@ static void Hiyoku_Init(GameData* data, bool is_from_ep_bonus) {
     }
     data->hiyoku_st_games = get_st_games_from_level(data->hiyoku_level);
 }
+
 static void BB_EX_Init(GameData* data) {
     int continue_rate_percent = 50; 
     if ((rand() % 100) < 5) { 
         continue_rate_percent = 80;
     }
 
-    int payout = PAYOUT_TARGET_BB_EX; 
+    // (★修正) 初期枚数を 200枚 に設定
+    int payout = 200; 
     bool is_over_1000 = false; 
 
     while ((rand() % 100) < continue_rate_percent) {
@@ -61,6 +56,7 @@ static void BB_EX_Init(GameData* data) {
     }
     data->queued_bb_ex_payout += payout; 
 }
+
 static bool is_payout_reset_yaku(YakuType yaku) {
     switch (yaku) {
         case YAKU_FRANXX_ME:                
@@ -73,6 +69,7 @@ static bool is_payout_reset_yaku(YakuType yaku) {
             return false;
     }
 }
+
 static int get_gcount_for_addon(YakuType yaku) {
     int r = rand() % 1000; 
 
@@ -98,6 +95,7 @@ static int get_gcount_for_addon(YakuType yaku) {
     }
     return 0;
 }
+
 static void perform_game_count_addon(GameData* data, YakuType yaku) {
     int added_games = 0;
 
@@ -130,6 +128,7 @@ static void perform_game_count_addon(GameData* data, YakuType yaku) {
         snprintf(data->info_message, sizeof(data->info_message), "G数上乗せ +%dG！", added_games);
     }
 }
+
 static void perform_payout_addon(GameData* data, YakuType yaku) {
     int added_payout = 0;
     int r = rand() % 1000; 
@@ -177,8 +176,7 @@ static void perform_payout_addon(GameData* data, YakuType yaku) {
     }
 }
 
-// (★) --- ここが T13 の修正箇所 ---
-void transition_to_state(GameData* data, AT_State new_state) {
+static void transition_to_state(GameData* data, AT_State new_state) {
     
     data->current_state = new_state; 
     data->current_bonus_payout = 0; 
@@ -201,7 +199,6 @@ void transition_to_state(GameData* data, AT_State new_state) {
             break;
         case STATE_BONUS_HIGH_PROB:
             data->target_bonus_payout = 0; 
-            // (★) T12 の修正 (G数が 0 以下の場合のみ10Gをセットする) は維持
             if (data->bonus_high_prob_games <= 0) { 
                  data->bonus_high_prob_games = GAMES_ON_BB_INITIAL_END;
             }
@@ -220,7 +217,6 @@ void transition_to_state(GameData* data, AT_State new_state) {
             data->target_bonus_payout = 0; 
             break;
         case STATE_EPISODE_BONUS:
-            // (★) T13 修正: EPISODE_BONUS -> EP_BONUS
             data->target_bonus_payout = PAYOUT_TARGET_EP_BONUS;
             break;
         case STATE_TSUREDASHI:
@@ -235,7 +231,6 @@ void transition_to_state(GameData* data, AT_State new_state) {
              break;
     }
 }
-// (★) --- 修正ここまで ---
 
 static bool Hiyoku_PerformBonusAllocation(GameData* data, YakuType yaku) {
     int r = rand() % 1000;
@@ -262,6 +257,7 @@ static bool Hiyoku_PerformBonusAllocation(GameData* data, YakuType yaku) {
     }
     return false;
 }
+
 static void Hiyoku_PerformLevelUp(GameData* data) {
     int r = rand() % 1000;
     
@@ -274,6 +270,7 @@ static void Hiyoku_PerformLevelUp(GameData* data) {
         snprintf(data->info_message, sizeof(data->info_message), "レベルMAXXへ昇格！");
     }
 }
+
 static void Hiyoku_MainLogic(GameData* data, YakuType yaku) {
     if (!data->hiyoku_is_active) return;
     
@@ -339,12 +336,15 @@ static void Hiyoku_MainLogic(GameData* data, YakuType yaku) {
         }
     }
 }
+
 static void handle_parallel_hiyoku(GameData* data, YakuType yaku) {
     Hiyoku_MainLogic(data, yaku);
 }
+
 static void handle_hiyoku_beats(GameData* data, YakuType yaku) {
     Hiyoku_MainLogic(data, yaku);
 }
+
 static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
     data->current_bonus_payout += diff;
     bool did_transition = false;
@@ -435,7 +435,6 @@ static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
 
     if (did_transition) return; 
 
-    // (★) T12 の修正 (10G加算ロジック) はここに反映済み
     if (data->current_bonus_payout >= data->target_bonus_payout) {
         bool came_from_ep = (data->current_state == STATE_EPISODE_BONUS);
         
@@ -452,7 +451,6 @@ static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
         }
         else 
         {
-            // (★) T12 修正
             data->bonus_high_prob_games += GAMES_ON_BB_INITIAL_END;
             transition_to_state(data, STATE_BONUS_HIGH_PROB); 
         }
@@ -460,25 +458,19 @@ static void handle_payout_bonus(GameData* data, YakuType yaku, int diff) {
 }
 
 
-// --- 公開関数 (★修正済み T6) ---
+// --- 公開関数 ---
 
 void AT_Init(GameData* data) {
     transition_to_state(data, STATE_BB_INITIAL);
 }
 
-/**
- * @brief (★新規) AT中のメイン更新処理 (毎フレーム呼び出す)
- */
 void AT_Update(GameData* data, YakuType yaku, int diff, bool lever_on, bool all_reels_stopped) {
 
     if (lever_on) {
-        // (★) レバーオン時の処理 (T10)
+        // レバーオン時の処理
     }
 
     if (all_reels_stopped) {
-        
-        // (★) このブロックは、ターン5の AT_ProcessStop のロジックとほぼ同等 (T10)
-        
         bool run_parallel_hiyoku = (data->hiyoku_is_active && data->current_state != STATE_HIYOKU_BEATS);
         if (run_parallel_hiyoku) {
             handle_parallel_hiyoku(data, yaku);
@@ -506,13 +498,9 @@ void AT_Update(GameData* data, YakuType yaku, int diff, bool lever_on, bool all_
     }
 }
 
-/**
- * @brief (★新規) AT中の描画処理 (毎フレーム呼び出す)
- */
 void AT_Draw(SDL_Renderer* renderer, int screen_width, int screen_height) {
-    // (★) TODO: ここにAT状態専用の描画処理を追加する
+    // AT専用描画 (必要に応じて実装)
 }
-
 
 const char* AT_GetStateName(AT_State state) {
     const char* names[] = {

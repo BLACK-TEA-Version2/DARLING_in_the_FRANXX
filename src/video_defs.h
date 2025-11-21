@@ -1,42 +1,55 @@
 #ifndef VIDEO_DEFS_H
 #define VIDEO_DEFS_H
 
-// (★) 動画の種類
+// 動画の種類
 typedef enum {
     VIDEO_NONE = -1,
     VIDEO_IDLE,            // 待機中
     VIDEO_ENSHUTSU_AKA7,   // 赤7そろい演出 (仮)
     VIDEO_SPIN,            // リール回転中
 
-    // =================================================================
-    // (★追加) 専用演出ペア (導入 + ループ) (全4ペア)
-    // =================================================================
-    VIDEO_AT_PRES_A_INTRO, // ペアA (期待度低)
-    VIDEO_AT_PRES_A_LOOP,
-    VIDEO_AT_PRES_B_INTRO, // ペアB (期待度中)
-    VIDEO_AT_PRES_B_LOOP,
-    VIDEO_AT_PRES_C_INTRO, // ペアC (期待度高)
-    VIDEO_AT_PRES_C_LOOP,
-    VIDEO_AT_PRES_D_INTRO, // ペアD (当選濃厚)
-    VIDEO_AT_PRES_D_LOOP,
+    // --- AT高確率 専用演出ペア (導入 + ループ) ---
+    VIDEO_AT_PRES_A_INTRO, VIDEO_AT_PRES_A_LOOP,
+    VIDEO_AT_PRES_B_INTRO, VIDEO_AT_PRES_B_LOOP,
+    VIDEO_AT_PRES_C_INTRO, VIDEO_AT_PRES_C_LOOP,
+    VIDEO_AT_PRES_D_INTRO, VIDEO_AT_PRES_D_LOOP,
 
-    // =================================================================
-    // (★追加) 当落演出動画
-    // =================================================================
-    // 落選時 (3-4種)
+    // --- 当落演出動画 ---
+    
+    // 落選 (継続) - 1本構成
     VIDEO_JUDGE_LOSE_1,
     VIDEO_JUDGE_LOSE_2,
     VIDEO_JUDGE_LOSE_3,
-    // ダーリンボーナス当選時 (3-4種)
-    VIDEO_JUDGE_DARLING_1,
-    VIDEO_JUDGE_DARLING_2,
-    VIDEO_JUDGE_DARLING_3,
-    // フランクスボーナス当選時 (3-4種)
-    VIDEO_JUDGE_FRANXX_1,
-    VIDEO_JUDGE_FRANXX_2,
-    VIDEO_JUDGE_FRANXX_3,
 
-    VIDEO_COUNT            // (★) 常に末尾
+    // ダーリンボーナス当選 (Part1:煽り -> Part2:告知)
+    VIDEO_JUDGE_DARLING_1_PART1, VIDEO_JUDGE_DARLING_1_PART2,
+    VIDEO_JUDGE_DARLING_2_PART1, VIDEO_JUDGE_DARLING_2_PART2,
+    VIDEO_JUDGE_DARLING_3_PART1, VIDEO_JUDGE_DARLING_3_PART2,
+
+    // フランクスボーナス当選 (Part1:煽り -> Part2:告知)
+    VIDEO_JUDGE_FRANXX_1_PART1, VIDEO_JUDGE_FRANXX_1_PART2,
+    VIDEO_JUDGE_FRANXX_2_PART1, VIDEO_JUDGE_FRANXX_2_PART2,
+    VIDEO_JUDGE_FRANXX_3_PART1, VIDEO_JUDGE_FRANXX_3_PART2,
+
+    // --- BB EX 初期枚数決定演出 ---
+    VIDEO_BB_EX_ENTRY_INTRO, VIDEO_BB_EX_ENTRY_LOOP,
+
+    // 枚数告知 (導入+ループ)
+    VIDEO_BB_EX_SHOW_200_INTRO, VIDEO_BB_EX_SHOW_200_LOOP,
+    VIDEO_BB_EX_SHOW_300_INTRO, VIDEO_BB_EX_SHOW_300_LOOP,
+    VIDEO_BB_EX_SHOW_400_INTRO, VIDEO_BB_EX_SHOW_400_LOOP,
+    VIDEO_BB_EX_SHOW_500_INTRO, VIDEO_BB_EX_SHOW_500_LOOP,
+    VIDEO_BB_EX_SHOW_600_INTRO, VIDEO_BB_EX_SHOW_600_LOOP,
+    VIDEO_BB_EX_SHOW_700_INTRO, VIDEO_BB_EX_SHOW_700_LOOP,
+    VIDEO_BB_EX_SHOW_800_INTRO, VIDEO_BB_EX_SHOW_800_LOOP,
+    VIDEO_BB_EX_SHOW_900_INTRO, VIDEO_BB_EX_SHOW_900_LOOP,
+    VIDEO_BB_EX_SHOW_1000_INTRO, VIDEO_BB_EX_SHOW_1000_LOOP,
+    
+    // 1000枚単位
+    VIDEO_BB_EX_SHOW_2000_INTRO, VIDEO_BB_EX_SHOW_2000_LOOP,
+    VIDEO_BB_EX_SHOW_3000_INTRO, VIDEO_BB_EX_SHOW_3000_LOOP,
+
+    VIDEO_COUNT            // 常に末尾
 } VideoType;
 
 #endif // VIDEO_DEFS_H

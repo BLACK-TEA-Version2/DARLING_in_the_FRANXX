@@ -2,7 +2,7 @@
 #define AT_H
 
 #include "game_data.h" 
-#include <SDL2/SDL.h> // (★追加) SDL_Renderer のため
+#include <SDL2/SDL.h> 
 
 // --- 定義 (AT内部でのみ使う定数) ---
 #define BET_COUNT 3
@@ -22,12 +22,7 @@
 void AT_Init(GameData* data);
 
 /**
- * @brief (★廃止) AT_ProcessStop は AT_Update に統合されます。
- */
-// void AT_ProcessStop(GameData* data, YakuType yaku, bool oshijun_success);
-
-/**
- * @brief (★新規) AT中のメイン更新処理 (毎フレーム呼び出す)
+ * @brief AT中のメイン更新処理 (毎フレーム呼び出す)
  *
  * @param data ゲームデータ
  * @param yaku 【レバーオン時】に成立した役 (全停止までは保持される)
@@ -38,19 +33,13 @@ void AT_Init(GameData* data);
 void AT_Update(GameData* data, YakuType yaku, int diff, bool lever_on, bool all_reels_stopped);
 
 /**
- * @brief (★新規) AT中の描画処理 (毎フレーム呼び出す)
+ * @brief AT中の描画処理 (毎フレーム呼び出す)
  *
  * @param renderer レンダラー
  * @param screen_width 画面幅
  * @param screen_height 画面高さ
  */
 void AT_Draw(SDL_Renderer* renderer, int screen_width, int screen_height);
-
-/**
- * @brief (★ T19 修正) AT状態を強制的に遷移させ、状態に応じた初期化を行います。
- * (main.c から呼び出すために static を解除)
- */
-void transition_to_state(GameData* data, AT_State new_state);
 
 
 /**
